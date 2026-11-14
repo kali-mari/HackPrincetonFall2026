@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.db import DatabaseError
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from jsonschema import Draft202012Validator, FormatChecker
 
 from aac.history import time_bucket
@@ -38,6 +38,8 @@ def speak(patient, text, *, days_ago=0, activity='lunch', hours_ago=0, kind='spo
     )
 
 
+# AI off: a developer's .env provider must never be called by these tests.
+@override_settings(PREDICT_PROVIDER='')
 class PredictionTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
@@ -162,6 +164,7 @@ class PredictionTests(TestCase):
         self.assertNotIn(b'private', response.content)
 
 
+@override_settings(PREDICT_PROVIDER='')
 class LegacyPredictTests(TestCase):
     def predict(self, **changes):
         payload = {'time': NOW.isoformat(), 'activity': 'lunch', 'recent': [], **changes}

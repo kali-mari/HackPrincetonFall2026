@@ -13,7 +13,7 @@ Caregiver sets up a patient
   → exactly six suggestions reflect activity, time, and confirmed history
 ```
 
-UNO R4 WiFi handles buttons; UNO Q 4GB hosts Django and SQLite. Keyboard fallback is always Space = NEXT, Enter = SELECT. No touchscreen or touch sensor is required.
+Elegoo UNO R3 handles buttons; UNO Q 4GB hosts Django and SQLite. Keyboard fallback is always Space = NEXT, Enter = SELECT. No touchscreen or touch sensor is required.
 
 **Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Phase 2's backend is implemented: the six profile operations, `Profile`/`CaregiverPatient` models and migration, and `seed_demo`. Phase 3's backend is implemented: event recording, patient history, legacy `/api/log`, `CommunicationEvent`/`PredictionRecord` and seeded spoken history. Phase 4's deterministic predictions (new and legacy routes) are implemented. The other 11 business operations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
 
@@ -34,14 +34,14 @@ This document governs implementation sequence, not API definitions. Exact reques
 Frontend -- HTTP --> Django function views --> Django ORM --> SQLite on UNO Q
                               |--> TTS provider (ElevenLabs) --> local audio files
                               |--> optional bounded Bedrock predictions/analysis
-Frontend <-- WS --> Channels input group <-- WS --> serial bridge <-- R4 WiFi
+Frontend <-- WS --> Channels input group <-- WS --> serial bridge <-- Elegoo UNO R3
 Google Home <-- LAN audio URL + optional Cast command -- backend
 ```
 
 - **Frontend:** symbols, sentence construction, scanning, keyboard fallback, setup/input settings, explicit Speak, playback and completed-playback event submission. Use readable targets of at least 120px, high contrast and an unmistakable scanning highlight.
 - **Backend:** field/relationship validation, profiles, speech generation, event persistence, prediction ranking, caregiver labels and optional casting/AI. No implicit success event inside speech generation.
 - **Bridge:** serial-to-WebSocket translation and bounded reconnect behavior.
-- **R4 WiFi:** button debounce and the fixed serial protocol. Optional sustained-sound detection is an input switch, not transcription. Do not transfer R4 shield/voltage assumptions to UNO Q GPIO.
+- **Elegoo UNO R3:** button debounce and the fixed serial protocol. Optional sustained-sound detection is an input switch, not transcription. Do not transfer UNO R3 shield/voltage (5V) assumptions to UNO Q GPIO.
 - **UNO Q:** default Django/SQLite host. Conversation processing is local-only stretch scope, not part of the input relay.
 
 The single `input` group controls one active board; it is not multi-patient session routing. Run one ASGI process with the in-memory channel layer. Keep synchronous cloud SDK calls out of the WebSocket event loop.
@@ -97,7 +97,7 @@ These are modules, not new services or mandatory abstractions. Create files only
 | 3 | SQLite event history and retry safety | 2 | Core; backend done |
 | 4 | Deterministic predictions | 3 | Core; backend done |
 | 5 | Speech and first keyboard-driven demo loop | 2–4 | Core |
-| 6 | R4 WiFi buttons and WebSocket relay | 1; integrate with 5 | Core; build in parallel |
+| 6 | Elegoo UNO R3 buttons and WebSocket relay | 1; integrate with 5 | Core; build in parallel |
 | 7 | Fixed/custom labels and caregiver review | 2–3; connect to 4 | Next agreed product workflow |
 | 8 | Bounded Bedrock prediction enhancement | 4–5 | Demo AI target; fallback must always work |
 | 9 | Analysis, AI label proposals, configuration activation | 7 | After the core loop works |
@@ -196,11 +196,11 @@ Optional configured Google Home casting belongs in an isolated helper: when enab
 
 **Transport:** `WS /ws/input/`; no new HTTP operation.
 
-**Build in parallel with Phases 2–5:** R4 WiFi sketch for NEXT D2/SELECT D3 buttons, debounce and existing 9600-baud line protocol. Serial bridge translates accepted lines to existing action/source messages and reconnects with bounded retries. Close Arduino Serial Monitor while the bridge owns the port.
+**Build in parallel with Phases 2–5:** Elegoo UNO R3 sketch for PREV/NEXT/SELECT/DELETE/SPEAK buttons on D2–D6, plus a PREV + NEXT chord that sends `LISTEN` (see `hardware/README.md`), debounce and the 9600-baud line protocol. Serial bridge translates accepted lines to action/source messages and reconnects with bounded retries. Close Arduino Serial Monitor while the bridge owns the port.
 
 Implement Channels group join/leave, message validation and single broadcast without echo loops. Frontend feeds WS actions into the same scanning/selection path as Space/Enter. Validate origins for browser clients while supporting the intended non-browser bridge. Preserve legacy protocol values without requiring absent touch hardware or optional sound hardware.
 
-**Done when:** one socket's valid event reaches another once; malformed messages never broadcast. Real buttons scan/select the same way as keyboard, held/bouncing buttons do not produce unintended rapid selection, and unplugging R4/losing the socket does not break keyboard operation. Test R4 → bridge on UNO Q → Django → frontend, not just laptop simulation.
+**Done when:** one socket's valid event reaches another once; malformed messages never broadcast. Real buttons scan/select the same way as keyboard, held/bouncing buttons do not produce unintended rapid selection, and unplugging UNO R3/losing the socket does not break keyboard operation. Test UNO R3 → bridge on UNO Q → Django → frontend, not just laptop simulation.
 
 **Core demo gate:** complete Phases 1–6 and rehearse Phase 11 before adding richer features.
 
@@ -258,7 +258,7 @@ Build versioned application configuration from effective approved labels, never 
 - Install only needed runtime dependencies on UNO Q, apply migrations/seed fixtures, verify writable SQLite/media locations and frontend API/WS configuration. Keep generated files/database outside git.
 - Run one Django ASGI process with the in-memory channel layer; verify UI/device connectivity and microphone-free core operation. Collect/serve frontend/static assets as appropriate; offline Swagger assets must remain accessible.
 - Verify browser audio/autoplay interaction, optional speaker LAN access, and no doubled playback/logging. Keep a known demo output mode.
-- Rehearse setup → scan/select → speak → save → predict → restart → retained history, with actual R4 buttons and keyboard fallback.
+- Rehearse setup → scan/select → speak → save → predict → restart → retained history, with actual UNO R3 buttons and keyboard fallback.
 - Test unavailable AWS, unavailable history, bridge disconnect, malformed requests, repeated retries, wrong patient references and a failed write. Show clear errors rather than fabricated success; defaults/keyboard remain available where applicable.
 - Record the manual setup commands, exact implemented features and remaining scaffolds in README/API docs. Check that no 501 operation is on the rehearsed demo path.
 
@@ -268,7 +268,7 @@ Build versioned application configuration from effective approved labels, never 
 
 ### S1: local Conversation Mode
 
-Wait for Codex's actual UNO Q transcription findings; select local engine/settings based on measured memory, sustained throughput, accuracy and application responsiveness. Implement caregiver activation, listening indicator, keyboard/button stop, local microphone capture, bounded in-memory transcript, local topic/reply processing and normal-prediction fallback. Pause/handle board-audio echo. Stop/patient switch releases capture and rejects late results. No raw audio/transcripts/context in cloud calls or persistent logs/storage. Agree the separate session-scoped contract before implementation; never reuse the input broadcast group.
+Wait for Codex's actual UNO Q transcription findings; select local engine/settings based on measured memory, sustained throughput, accuracy and application responsiveness. Implement caregiver activation (the PREV + NEXT chord sends `LISTEN` on `/ws/input/` to toggle listening), listening indicator, keyboard/button stop, local microphone capture, bounded in-memory transcript, local topic/reply processing and normal-prediction fallback. Pause/handle board-audio echo. Stop/patient switch releases capture and rejects late results. No raw audio/transcripts/context in cloud calls or persistent logs/storage. Agree the separate session-scoped contract before implementation; never reuse the input broadcast group.
 
 **Gate:** target device sustains the whole local pipeline, not merely file transcription. Raw buffers clear on stop; no autonomous selection/speech. If performance fails, leave this mode disabled rather than silently offloading transcription.
 
@@ -315,7 +315,7 @@ As each operation graduates from scaffolding, cover:
 - **Labels/analysis:** revisions, review transitions, category limits, caregiver precedence, proposal exclusion, stale activation and provider failure without changing effective state.
 - **Optional Cast:** disabled, successful dispatch and unreachable speaker without losing normal speech response/browser fallback.
 
-Run separate manual smoke tests against the real speech provider, Bedrock and optional Google Home only for features being advertised. Record actual R4 → bridge → UNO Q → browser results and restart/failure-path rehearsal under Phase 11. A mock passing or a scaffold existing is not evidence of a working device/cloud integration.
+Run separate manual smoke tests against the real speech provider, Bedrock and optional Google Home only for features being advertised. Record actual UNO R3 → bridge → UNO Q → browser results and restart/failure-path rehearsal under Phase 11. A mock passing or a scaffold existing is not evidence of a working device/cloud integration.
 
 ## Parallel work and handoff rules
 

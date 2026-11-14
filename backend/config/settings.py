@@ -97,6 +97,20 @@ SPEECH_MODEL_ID = os.environ.get('SPEECH_MODEL_ID', '').strip()
 SPEECH_CACHE = env_bool('SPEECH_CACHE', True)
 ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
 
+# AI phrase predictions. PREDICT_PROVIDER picks a provider in aac/llm.py (openai,
+# anthropic, gemini, bedrock); blank disables AI and keeps deterministic history
+# predictions. Each SDK reads its own credentials from the environment.
+PREDICT_PROVIDER = os.environ.get('PREDICT_PROVIDER', '').strip().lower()
+PREDICT_MODEL = os.environ.get('PREDICT_MODEL', '').strip()
+try:
+    PREDICT_TIMEOUT_SECONDS = float(os.environ.get('PREDICT_TIMEOUT_SECONDS', '2'))
+except ValueError:
+    PREDICT_TIMEOUT_SECONDS = 0
+if not 0 < PREDICT_TIMEOUT_SECONDS <= 10:
+    raise ImproperlyConfigured('PREDICT_TIMEOUT_SECONDS must be a number of seconds above 0 and at most 10.')
+if PREDICT_PROVIDER and PREDICT_PROVIDER not in {'openai', 'anthropic', 'gemini', 'bedrock'}:
+    raise ImproperlyConfigured('PREDICT_PROVIDER must be openai, anthropic, gemini, bedrock or blank.')
+
 # Optional Google Home casting: blank disables it. The speaker fetches audio from
 # BACKEND_PUBLIC_BASE_URL, so that URL must be reachable on the LAN.
 GOOGLE_HOME_HOST = os.environ.get('GOOGLE_HOME_HOST', '').strip()
@@ -114,6 +128,8 @@ CORS_URLS_REGEX = r'^/api/'
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # first, so runserver serves ASGI (HTTP + WebSockets)
+    'channels',
     'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -154,7 +170,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-# Channels/Daphne and input routing are added with the WebSocket workstream.
+
+# One ASGI process; the in-memory layer does not work across processes.
+CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
 
 # Database

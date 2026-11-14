@@ -88,6 +88,15 @@ class RuntimeSettingsTests(SimpleTestCase):
         self.assertEqual((values['SPEECH_PROVIDER'], values['SPEECH_CACHE'], values['GOOGLE_HOME_HOST']),
                          ('elevenlabs', False, '192.0.2.50'))
 
+    def test_prediction_ai_settings(self):
+        values = self.read_settings()
+        self.assertEqual((values['PREDICT_PROVIDER'], values['PREDICT_MODEL'], values['PREDICT_TIMEOUT_SECONDS']),
+                         ('', '', 2.0))
+        values = self.read_settings({'PREDICT_PROVIDER': ' Gemini ', 'PREDICT_MODEL': ' some-model ',
+                                     'PREDICT_TIMEOUT_SECONDS': '1.5'})
+        self.assertEqual((values['PREDICT_PROVIDER'], values['PREDICT_MODEL'], values['PREDICT_TIMEOUT_SECONDS']),
+                         ('gemini', 'some-model', 1.5))
+
     def test_configured_legacy_demo_patient_id(self):
         values = self.read_settings({'LEGACY_DEMO_PATIENT_ID': '99999999-9999-4999-8999-999999999999'})
         self.assertEqual(values['LEGACY_DEMO_PATIENT_ID'], UUID('99999999-9999-4999-8999-999999999999'))
@@ -129,6 +138,8 @@ class RuntimeSettingsTests(SimpleTestCase):
             )],
             *[{'LEGACY_DEMO_PATIENT_ID': value} for value in ('', 'private-not-a-uuid')],
             {'SPEECH_CACHE': 'private'},
+            {'PREDICT_PROVIDER': 'private-llm'},
+            *[{'PREDICT_TIMEOUT_SECONDS': value} for value in ('private', '0', '-1', '11', 'nan')],
             *[{'GOOGLE_HOME_HOST': '192.0.2.50', 'BACKEND_PUBLIC_BASE_URL': url}
               for url in ('http://localhost:8000', 'http://127.0.0.1:8000', 'http://[::1]:8000')],
         ]

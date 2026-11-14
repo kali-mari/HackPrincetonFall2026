@@ -10,7 +10,7 @@ The agreed storage/hardware direction below is implemented in the sequence defin
 
 - Preserve existing `/api/speak`, `/api/predict`, `/api/log` request shapes and `/ws/input/` messages. Specify `/api/log` success as `200 { "ok": true }`; its persistence changes to SQLite, not DynamoDB.
 - Add the namespaced profile/AAC/learning contracts described below. Profile routes, event recording/history, `/api/log` and predictions are implemented; the other AAC, learning and legacy routes are scaffolded (JSON 501).
-- UNO R4 WiFi handles physical buttons. UNO Q 4GB hosts Django and the SQLite application database, with local transcription as a benchmark-dependent stretch goal. No touchscreen or touch sensor; keyboard fallback remains required.
+- Elegoo UNO R3 handles physical buttons. UNO Q 4GB hosts Django and the SQLite application database, with local transcription as a benchmark-dependent stretch goal. No touchscreen or touch sensor; keyboard fallback remains required.
 - Keep one Django app (`aac`) with plain function views. Namespaces describe responsibilities, not separate services or Django apps.
 - Use one relational database plus JSON fields and local files; no object database, object storage service, or dual-write synchronization for the hackathon. The same application may later run on a server behind Caddy via deployment settings; do not share a SQLite file over the network.
 
@@ -207,7 +207,7 @@ Keep each patient's events, labels, artifacts, and caches isolated. Use only eve
 
 **Planned stretch goal, not implemented live-listening support.** Add local conversation-aware suggestions and a topic timeline only after the core demo works end to end and on-device transcription benchmarks are acceptable. Keep the existing profiles, event history, and label workflow.
 
-Target hardware: UNO R4 WiFi handles physical button inputs; UNO Q 4GB hosts Django, SQLite, and local transcription. Conversation audio, transcripts, inferred topics, and generated reply context must not be sent to hosted transcription, Claude, or Jev services. The local speech-to-text engine, topic detector, reply-generation approach, and API/streaming contracts still require validation. This local-only boundary is separate from existing cloud speech output and ordinary non-conversation predictions.
+Target hardware: Elegoo UNO R3 handles physical button inputs; UNO Q 4GB hosts Django, SQLite, and local transcription. Conversation audio, transcripts, inferred topics, and generated reply context must not be sent to hosted transcription, Claude, or Jev services. The local speech-to-text engine, topic detector, reply-generation approach, and API/streaming contracts still require validation. This local-only boundary is separate from existing cloud speech output and ordinary non-conversation predictions.
 
 Intended flow:
 
@@ -263,7 +263,7 @@ Persist only the categorical topic reference, timing, and detector metadata—no
 
 Device-local records must be excluded from server migration, cloud synchronization, hosted AI context, and public Caddy routes. If ordinary Django moves to a server, keep the conversation component and its storage on the UNO Q; resolve that split explicitly rather than uploading local conversation tables with a whole-database migration. Foreign-key relationships above describe the default single-device deployment; a future split requires explicit identity/link handling.
 
-These are documentation proposals, not migrations or new endpoints. A future contract must cover start/stop, patient/session isolation, bounded context duration/size, partial/final transcript handling, stale-result rejection, local history access, and cleanup. Choose a separate session-scoped transport if streaming is needed; **do not repurpose `/ws/input/` or broadcast transcripts to its shared `input` group**. Existing request/response shapes remain unchanged.
+These are documentation proposals, not migrations or new endpoints. A future contract must cover start/stop, patient/session isolation, bounded context duration/size, partial/final transcript handling, stale-result rejection, local history access, and cleanup. Choose a separate session-scoped transport if streaming is needed; **do not repurpose `/ws/input/` or broadcast transcripts to its shared `input` group**. Only the `LISTEN` start/stop toggle (PREV + NEXT chord) travels on `/ws/input/`. Existing request/response shapes remain unchanged.
 
 Acceptance before enabling the stretch feature:
 

@@ -10,10 +10,10 @@
 | Shared transport/value helpers | Implemented and tested; used by the profile routes |
 | Profile routes (6 operations) | Implemented: SQLite persistence, field/query/cursor validation, role scoping, 503 on storage failure |
 | Event history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events`, `POST /api/log` | Implemented: SQLite persistence, retry safety, prediction attribution checks |
-| Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults; no cloud access |
+| Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults, plus optional AI (OpenAI, Anthropic, Gemini or Bedrock) with a 2-second fallback |
 | Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting |
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
-| `WS /ws/input/` | Message contract documented; consumer not implemented |
+| `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
 
 The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** deterministic predictions and speech are implemented; AI integration is not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
@@ -46,6 +46,7 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 - Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
 - Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
 - `source` is `history` when any phrase came from history, otherwise `default`. `artifact_version` is always null for now.
+- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent` and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output replaces the phrases and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Response shapes are unchanged, and `recent` is still never stored.
 - `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
 - `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 
@@ -143,7 +144,7 @@ Activation requires the expected active version (null initially) and current voc
 
 SQLite on UNO Q replaces the original DynamoDB history plan. Use Django ORM/migrations, JSON fields for small flexible payloads, and local filesystem storage for generated audio/model files. No object database or second storage service is needed. Automated retention and backup infrastructure are out of hackathon scope; use synthetic fixtures, gitignored local data and manual reset.
 
-UNO R4 WiFi handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Local runtime settings now load from `backend/.env`; see [backend setup](../backend/README.md) for path, host and public-URL configuration. Profile migrations exist (`aac/migrations/0001_initial.py`); target/server deployment and a Caddyfile remain unimplemented. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
+Elegoo UNO R3 handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Local runtime settings now load from `backend/.env`; see [backend setup](../backend/README.md) for path, host and public-URL configuration. Profile migrations exist (`aac/migrations/0001_initial.py`); target/server deployment and a Caddyfile remain unimplemented. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
 
 Conversation Mode remains a separate local-only stretch feature. Raw audio/transcripts stay in memory. Approved scope permits device-local saved suggestion batches and categorical topic segments, not transcript persistence. Do not migrate those tables to a remote server or expose them through public proxy routes. See [data-outline.md](data-outline.md) for the timeline design and unresolved split-deployment boundary.
 
@@ -155,9 +156,24 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 { "action": "NEXT", "source": "button" }
 ```
 
-- `action`: `NEXT | SELECT`.
-- `source`: `button | touch | voice` (legacy compatibility vocabulary; demo uses buttons).
-- Serial input protocol remains plain text at 9600 baud, `NEXT`, `SELECT`, `TOUCH`, `VOICE`; no hardware/protocol change in this task.
+- `action`: `PREV | NEXT | SELECT | DELETE | SPEAK | LISTEN`. `LISTEN` toggles caregiver listen mode; it is sent when PREV and NEXT are held together.
+- `source`: `button | touch | voice`. Buttons send any action; `voice` (optional sound-sensor switch) and `touch` (legacy, no current hardware) always send `SELECT`.
+- Serial input is plain text at 9600 baud, one token per line, mapped by `hardware/bridge.py`:
+
+| Input | Serial line | WebSocket message |
+| --- | --- | --- |
+| D2 PREV | `PREV` | `{"action": "PREV", "source": "button"}` |
+| D3 NEXT | `NEXT` | `{"action": "NEXT", "source": "button"}` |
+| D4 WORD | `SELECT` | `{"action": "SELECT", "source": "button"}` |
+| D5 DEL | `DELETE` | `{"action": "DELETE", "source": "button"}` |
+| D6 SAY | `SPEAK` | `{"action": "SPEAK", "source": "button"}` |
+| D2 + D3 held together | `LISTEN` | `{"action": "LISTEN", "source": "button"}` |
+| A0 sound | `VOICE` | `{"action": "SELECT", "source": "voice"}` |
+| legacy | `TOUCH` | `{"action": "SELECT", "source": "touch"}` |
+
+- The bridge drops presses while the WebSocket is down; it never replays them.
+- The consumer broadcasts each valid message once to every other client in the group, never back to its sender. Invalid JSON, unknown actions/sources, extra fields and binary frames are dropped (logged) without closing the connection.
+- Browser clients must send an `Origin` listed in `CORS_ALLOWED_ORIGINS` (default `http://localhost:5173`); others are rejected with 403. The bridge sends no `Origin` and is allowed, so the stock `AllowedHostsOriginValidator` is not used. Like the HTTP API, this is unauthenticated and for a trusted local network only.
 - Keyboard is local frontend input, not a new WebSocket source.
 - No conversation audio/transcripts on this broadcast group.
 

@@ -7,7 +7,7 @@ This is a 36 hour hackathon build. The demo path comes first. Keep code simple: 
 ## Repo layout
 
 - `frontend/`: React + Vite + TypeScript. Symbol grid, sentence strip, prediction row, scanning highlight, input settings, caregiver dashboard.
-- `backend/`: Django + Django Channels (Python). One Django app, `aac`, holds the views, the WebSocket consumer, and the Bedrock, text-to-speech, and Google Home code.
+- `backend/`: Django + Django Channels (Python). One Django app, `aac`, holds the views, the WebSocket consumer, and the AI prediction, text-to-speech, and Google Home code.
 - `hardware/`: Arduino Uno sketch (`aac_switch/`) and the Python serial bridge (`bridge.py`).
 
 ## Contracts (shared by all three folders; do not change without telling the team)
@@ -17,11 +17,11 @@ Backend runs on `http://localhost:8000`.
 - `POST /api/speak` body `{ "text": string }` returns `{ "audio_url": string }`. Also casts the audio to the Google Home if one is configured.
 - `POST /api/predict` body `{ "time": ISO string, "activity": string, "recent": string[] }` returns `{ "phrases": string[] }` with exactly 6 phrases.
 - `POST /api/log` body `{ "text": string, "timestamp": ISO string }` records a spoken sentence to DynamoDB.
-- `WS /ws/input/` pushes `{ "action": "NEXT" | "SELECT", "source": "button" | "touch" | "voice" }` to the frontend. The bridge sends to the same socket; the consumer broadcasts to a single Channels group, `input`.
+- `WS /ws/input/` pushes `{ "action": "PREV" | "NEXT" | "SELECT" | "DELETE" | "SPEAK" | "LISTEN", "source": "button" | "touch" | "voice" }` to the frontend. `voice` and `touch` always carry `SELECT`. `LISTEN` toggles caregiver listen mode (speech-to-text). The bridge sends to the same socket; the consumer broadcasts to a single Channels group, `input`.
 
-Arduino to bridge: plain text lines over serial at 9600 baud, `NEXT`, `SELECT`, `TOUCH`, `VOICE`.
+Arduino to bridge: plain text lines over serial at 9600 baud, one token per line: `PREV`, `NEXT`, `SELECT`, `DELETE`, `SPEAK` (buttons), `LISTEN` (PREV + NEXT held together), `VOICE` (vocal switch, sent as `SELECT`/`voice`), and legacy `TOUCH` (sent as `SELECT`/`touch`). Full table in `hardware/README.md`.
 
-Grove pins (base shield set to 5V): NEXT button D2, SELECT button D3, touch sensor D4, sound sensor A0.
+Buttons (INPUT_PULLUP, wired to GND): PREV D2, NEXT D3, WORD/SELECT D4, DEL D5, SAY/SPEAK D6. Optional sound sensor (vocal switch) A0.
 
 ## Backend conventions
 
@@ -39,8 +39,8 @@ Grove pins (base shield set to 5V): NEXT button D2, SELECT button D3, touch sens
 
 ## Rules
 
-- AWS and speech-provider credentials (for example `ELEVENLABS_API_KEY`) live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
-- Bedrock: use a fast Claude Haiku model. Ask for JSON with exactly 6 phrases. If the call fails or takes over 2 seconds, fall back to the most frequent phrases for that time of day.
+- AI-provider, AWS and speech-provider credentials (for example `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`) live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
+- AI predictions: provider-neutral `aac/llm.py`, selected by `PREDICT_PROVIDER` (`openai`, `anthropic`, `gemini` or `bedrock`; blank = off) with `PREDICT_MODEL`. Use a fast model (default for `anthropic` is Claude Haiku). Ask for JSON with exactly 6 phrases. If the call fails, returns invalid output or takes over 2 seconds, fall back to the history/default phrases.
 - Speech: provider-neutral `aac/speech.py`, selected by `SPEECH_PROVIDER` (currently ElevenLabs), with a child sounding voice set by `SPEECH_VOICE_ID`.
 - UI: large touch targets (at least 120px), high contrast, an unmistakable scanning highlight.
 - Keyboard fallback always works: Space = NEXT, Enter = SELECT.

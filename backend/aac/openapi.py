@@ -431,9 +431,12 @@ SCHEMAS = {
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
     "InputMessage": obj(
-        {"action": enum("NEXT", "SELECT"), "source": enum("button", "touch", "voice")},
+        {
+            "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK", "LISTEN"),
+            "source": enum("button", "touch", "voice"),
+        },
         ("action", "source"),
-        description="Existing WS compatibility vocabulary. Demo uses buttons; keyboard is handled locally in the frontend, not added to this protocol.",
+        description="Switch input from hardware/bridge.py. Buttons send PREV/NEXT/SELECT/DELETE/SPEAK with source button, and LISTEN (PREV + NEXT held together) toggles caregiver listen mode; the vocal switch and legacy touch always send SELECT. Keyboard is handled locally in the frontend, not added to this protocol.",
     ),
 }
 
@@ -696,7 +699,7 @@ def build_openapi():
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
     speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
-    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. AI wait over two seconds, failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
+    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. Optional AI (PREDICT_PROVIDER: openai, anthropic, gemini or bedrock) receives activity, time bucket, recent and the history-ranked phrases as data. AI wait over two seconds (PREDICT_TIMEOUT_SECONDS), failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
     add(
         "/api/speak",
         "post",
@@ -1094,11 +1097,11 @@ def build_openapi():
             "components": {"schemas": deepcopy(SCHEMAS)},
             "x-websocket": {
                 "path": "/ws/input/",
-                "status": "planned",
+                "status": "implemented",
                 "group": "input",
                 "message": ref("InputMessage"),
-                "example": {"action": "NEXT", "source": "button"},
-                "description": "Single local active board. Plain serial lines at 9600 baud. Button demo sends NEXT/SELECT. Space/Enter handled by frontend. No conversation streaming on this group.",
+                "example": {"action": "SPEAK", "source": "button"},
+                "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, LISTEN, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
             },
         }
     )
