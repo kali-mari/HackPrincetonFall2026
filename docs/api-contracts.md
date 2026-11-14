@@ -155,9 +155,21 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 { "action": "NEXT", "source": "button" }
 ```
 
-- `action`: `NEXT | SELECT`.
-- `source`: `button | touch | voice` (legacy compatibility vocabulary; demo uses buttons).
-- Serial input protocol remains plain text at 9600 baud, `NEXT`, `SELECT`, `TOUCH`, `VOICE`; no hardware/protocol change in this task.
+- `action`: `PREV | NEXT | SELECT | DELETE | SPEAK`.
+- `source`: `button | touch | voice`. Buttons send any action; `voice` (optional sound-sensor switch) and `touch` (legacy, no current hardware) always send `SELECT`.
+- Serial input is plain text at 9600 baud, one token per line, mapped by `hardware/bridge.py`:
+
+| Input | Serial line | WebSocket message |
+| --- | --- | --- |
+| D2 PREV | `PREV` | `{"action": "PREV", "source": "button"}` |
+| D3 NEXT | `NEXT` | `{"action": "NEXT", "source": "button"}` |
+| D4 WORD | `SELECT` | `{"action": "SELECT", "source": "button"}` |
+| D5 DEL | `DELETE` | `{"action": "DELETE", "source": "button"}` |
+| D6 SAY | `SPEAK` | `{"action": "SPEAK", "source": "button"}` |
+| A0 sound | `VOICE` | `{"action": "SELECT", "source": "voice"}` |
+| legacy | `TOUCH` | `{"action": "SELECT", "source": "touch"}` |
+
+- The bridge drops presses while the WebSocket is down; it never replays them.
 - Keyboard is local frontend input, not a new WebSocket source.
 - No conversation audio/transcripts on this broadcast group.
 

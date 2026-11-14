@@ -431,9 +431,12 @@ SCHEMAS = {
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
     "InputMessage": obj(
-        {"action": enum("NEXT", "SELECT"), "source": enum("button", "touch", "voice")},
+        {
+            "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK"),
+            "source": enum("button", "touch", "voice"),
+        },
         ("action", "source"),
-        description="Existing WS compatibility vocabulary. Demo uses buttons; keyboard is handled locally in the frontend, not added to this protocol.",
+        description="Switch input from hardware/bridge.py. Buttons send PREV/NEXT/SELECT/DELETE/SPEAK with source button; the vocal switch and legacy touch always send SELECT. Keyboard is handled locally in the frontend, not added to this protocol.",
     ),
 }
 
@@ -1097,8 +1100,8 @@ def build_openapi():
                 "status": "planned",
                 "group": "input",
                 "message": ref("InputMessage"),
-                "example": {"action": "NEXT", "source": "button"},
-                "description": "Single local active board. Plain serial lines at 9600 baud. Button demo sends NEXT/SELECT. Space/Enter handled by frontend. No conversation streaming on this group.",
+                "example": {"action": "SPEAK", "source": "button"},
+                "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
             },
         }
     )
