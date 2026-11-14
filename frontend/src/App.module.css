@@ -1,0 +1,463 @@
+/* Geometry is LAYOUT.md: 6 bands of 120px with 16px gaps = 800px tall; 160px tab column + 8 tile columns = 1248px wide. */
+
+.viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Centered and scaled as one fixed-size piece, so a smaller window never moves anything. */
+.board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--board-width);
+  height: var(--board-height);
+  padding-inline: var(--space-2);
+  display: grid;
+  grid-template-columns: var(--tab-column-width) repeat(8, var(--tile-min-size));
+  grid-template-rows: repeat(6, var(--tile-min-size));
+  gap: var(--tile-gap);
+}
+
+.strip {
+  grid-column: 1 / 5;
+  justify-content: flex-start;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: var(--space-1) var(--space-3);
+  border-width: var(--strip-border-width);
+  font-size: var(--font-size-strip);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  text-align: start;
+}
+
+/* Two rows of 44px chips + an 8px gap fill the 96px inside the strip; extra rows overflow upward, so the newest words stay in view. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+}
+
+.chip {
+  padding: 0 var(--space-1);
+  border: var(--tile-border-width) solid color-mix(in srgb, var(--fill), var(--color-ink) var(--tile-border-mix));
+  border-radius: var(--chip-radius);
+  background: var(--fill);
+  white-space: nowrap;
+}
+
+/* The strip is disabled only while audio plays. */
+.strip:disabled {
+  animation: pulse var(--motion-pulse-duration) ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  to { border-color: var(--strip-pulse-color); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip:disabled { animation: none; }
+}
+
+/* Caregiver cell above grid column 4: gear + room for the /f5 clock, then the connection dot. */
+.status {
+  grid-row: 1;
+  grid-column: 5 / 6;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-1);
+  font-size: var(--cg-font-size); /* adult text: one line each for Listening / Backup voice and the dot row */
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
+}
+
+.statusTools {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.tool {
+  width: var(--caregiver-target);
+  height: var(--caregiver-target);
+  border-radius: var(--cg-radius);
+}
+
+.tool svg {
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* The demo clock is filled while a demo time is set, so nobody forgets the board is on a fake clock. */
+.tool[aria-pressed='true'] {
+  background: var(--cg-accent);
+  color: var(--cg-on-accent);
+  border-color: var(--cg-accent);
+}
+
+.listening {
+  margin: 0;
+  padding: 0 var(--space-1);
+  border-radius: var(--cg-radius);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
+/* A quiet note, not an alarm: the child was still heard. */
+.note {
+  margin: 0;
+  overflow: hidden;
+  color: var(--cg-text-muted);
+  font-weight: var(--font-weight-bold);
+  text-overflow: ellipsis; /* a wider fallback font must never push the dot row out of the cell */
+}
+
+/* One click lets Chrome play sound; switch presses alone never count as one. */
+.start {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-size: var(--font-size-body);
+}
+
+/* Dressed like Speak, so the first thing the child sees is the board's own "go" button. */
+.startTarget {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--tile-radius);
+  background: var(--color-ink);
+  color: var(--color-page);
+  font-size: var(--font-size-strip);
+  font-weight: var(--font-weight-bold);
+}
+
+.startTarget svg {
+  width: var(--space-8);
+  height: var(--space-8);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.startTarget svg path:first-child {
+  fill: currentColor;
+}
+
+.startHint {
+  color: var(--cg-text-muted);
+}
+
+.activity {
+  text-transform: capitalize;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  min-height: var(--space-3);
+  font-weight: var(--font-weight-bold);
+}
+
+.dotOn,
+.dotOff {
+  width: var(--status-dot-size);
+  height: var(--status-dot-size);
+  border-radius: 50%;
+  flex: none;
+}
+
+.dotOn {
+  background: var(--status-on);
+}
+
+.dotOff {
+  border: calc(var(--status-dot-size) / 8) solid var(--status-off);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Caregiver dialogs (input settings, demo clock): caregiver palette, smaller type than the child's board. */
+.dialog {
+  width: var(--cg-dialog-width);
+  padding: var(--space-4);
+  border: var(--cg-border-width) solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+  color: var(--cg-text);
+  font-size: var(--cg-font-size);
+  line-height: var(--line-height-body);
+}
+
+/* Same calm focus ring as the dashboard, not the board's thick scan outline. */
+.dialog :focus-visible {
+  outline: var(--cg-focus-width) solid var(--scan-color);
+  outline-offset: var(--cg-focus-width);
+  box-shadow: none;
+}
+
+.dialog::backdrop {
+  background: color-mix(in srgb, var(--color-ink) 50%, transparent);
+}
+
+.dialog h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-tile);
+}
+
+.dialog p {
+  margin: 0 0 var(--space-3);
+  color: var(--cg-text-muted);
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: var(--caregiver-target);
+  margin-bottom: var(--space-1);
+  padding: var(--space-2);
+  border: var(--cg-border-width) solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface);
+  cursor: pointer;
+}
+
+.source input {
+  width: var(--space-3);
+  height: var(--space-3);
+  flex-shrink: 0; /* long hints wrapped and squeezed the checkbox */
+  margin: 0;
+  /* Centered on the bold first line, not the whole block. */
+  margin-top: calc((var(--line-height-body) * 1em - var(--space-3)) / 2);
+  accent-color: var(--cg-accent);
+}
+
+.source span {
+  display: flex;
+  flex-direction: column;
+}
+
+.source span span {
+  color: var(--cg-text-muted);
+}
+
+/* Voice switch tuning, indented under its checkbox (checkbox width + gap). */
+.voice {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2) 0 calc(var(--space-2) + var(--space-3) + var(--space-2));
+}
+
+.voice label {
+  display: flex;
+  flex-direction: column;
+  font-weight: var(--font-weight-bold);
+}
+
+.voice input {
+  width: 100%;
+  height: var(--caregiver-target);
+  margin: 0;
+  accent-color: var(--cg-accent);
+}
+
+.voice p {
+  margin: var(--space-1) 0 0;
+}
+
+/* A setup problem in a caregiver panel: plain ink on a quiet panel, not an alarm. */
+.dialog .problem {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+  color: var(--cg-text);
+}
+
+.meter {
+  position: relative;
+  height: var(--space-2);
+  border: var(--cg-border-width) solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+  overflow: hidden;
+}
+
+.meterLevel {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--cg-accent);
+}
+
+/* The threshold line: the level must pass it for half a second. */
+.meterThreshold {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--tile-border-width);
+  background: var(--cg-text);
+}
+
+.close,
+.secondary {
+  width: 100%;
+  height: var(--caregiver-target);
+  margin-top: var(--space-3);
+  border: none;
+  border-radius: var(--cg-radius);
+  background: var(--cg-accent);
+  color: var(--cg-on-accent);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.secondary {
+  margin-top: var(--space-1);
+  border: var(--cg-border-width) solid var(--cg-border);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+}
+
+.time {
+  width: 100%;
+  height: var(--caregiver-target);
+  padding: 0 var(--space-2);
+  border: var(--cg-border-width) solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface);
+  font: inherit;
+  font-size: var(--font-size-tile);
+  color: var(--cg-text);
+  accent-color: var(--cg-accent);
+}
+
+.speak {
+  grid-column: 6 / 8;
+  gap: var(--space-2);
+  background: var(--color-ink);
+  color: var(--color-page);
+  font-size: var(--font-size-heading);
+}
+
+/* Nothing to say yet: an outlined box like Delete, so it turns solid black, "ready", with the first word. */
+.speak[aria-disabled='true'] {
+  background: var(--color-page);
+  color: var(--color-ink);
+}
+
+.speak svg {
+  width: var(--space-6);
+  height: var(--space-6);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.speak svg path:first-child {
+  fill: currentColor;
+}
+
+.spinner {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: var(--space-1) solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Floats over the prediction row so nothing on the board moves; taps pass through it. */
+.error {
+  position: absolute;
+  top: calc(var(--tile-min-size) + var(--tile-gap));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--tile-radius);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: var(--font-size-prediction);
+  font-weight: var(--font-weight-bold);
+  pointer-events: none;
+}
+
+.predictions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--tile-gap);
+}
+
+.prediction {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-prediction);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.tabs {
+  grid-row: 3 / -1;
+  display: grid;
+  grid-template-rows: repeat(4, var(--tile-min-size));
+  gap: var(--tile-gap);
+}
+
+.tab {
+  padding: var(--space-1);
+  line-height: var(--line-height-tight);
+}
+
+.tab[aria-pressed='true'] {
+  font-weight: var(--font-weight-bold);
+  box-shadow: inset calc(-1 * var(--space-1)) 0 0 var(--color-ink);
+}
+
+.grid {
+  grid-column: 2 / -1;
+  grid-row: 3 / -1;
+  display: grid;
+  grid-template-columns: repeat(8, var(--tile-min-size));
+  grid-template-rows: repeat(4, var(--tile-min-size));
+  gap: var(--tile-gap);
+}

@@ -1,0 +1,37 @@
+/* --fill is set per wordType below; the border is the same hue, darker. */
+.tile {
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--fill);
+  border-color: color-mix(in srgb, var(--fill), var(--color-ink) var(--tile-border-mix));
+  transition-property: outline-color, opacity, transform, filter;
+}
+
+/* Press feedback, so the child sees the tap land before audio plays. A tap clears the scan, so this never meets the 1.05 scan scale. */
+.tile:active:not([data-scan]) {
+  filter: brightness(var(--tile-press-brightness));
+  transform: scale(var(--tile-press-scale));
+}
+
+.icon {
+  width: var(--tile-symbol-size);
+  height: var(--tile-symbol-size);
+}
+
+.label {
+  font-size: var(--font-size-tile);
+  font-weight: var(--font-weight-bold);
+}
+
+/* 28px, not 32: 6-letter words like "banana" crowd the 120px tile edge at 32. */
+.labelOnly {
+  font-size: var(--font-size-prediction);
+  font-weight: var(--font-weight-bold);
+}
+
+.person { --fill: var(--tile-people); }
+.verb { --fill: var(--tile-verb); }
+.describing { --fill: var(--tile-describe); }
+.noun { --fill: var(--tile-noun); }
+.social { --fill: var(--tile-social); }
+.negation { --fill: var(--tile-negation); }

@@ -1,0 +1,78 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-family);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-tile);
+  color: var(--color-ink);
+  background: var(--color-page);
+  border: var(--tile-border-width) solid var(--tile-border);
+  border-radius: var(--tile-radius);
+  cursor: pointer;
+  touch-action: manipulation;
+  overflow-wrap: anywhere;
+  text-align: center;
+  outline: var(--scan-outline-width) solid transparent;
+  outline-offset: var(--scan-outline-offset);
+  transition-property: outline-color, opacity, transform;
+  transition-duration: var(--motion-highlight-duration);
+  transition-timing-function: var(--motion-highlight-easing);
+}
+
+button:active {
+  filter: brightness(0.9);
+}
+
+button:disabled {
+  cursor: progress;
+}
+
+/* Scanning highlight (LAYOUT.md). Durations come from the highlight token, so reduced motion makes every change instant. */
+button[data-scan='group'],
+button[data-scan='item'],
+button[data-scan='back'],
+button:focus-visible {
+  outline-color: var(--scan-color);
+  /* A white ring inside the violet keeps it visible on every fill, including the black Speak button. */
+  box-shadow: inset 0 0 0 calc(var(--scan-outline-width) + var(--space-1)) var(--color-page);
+}
+
+/* Group level: every box in the group, with the inner ring tinted violet. The fill keeps its true Fitzgerald color. */
+button[data-scan='group'] {
+  box-shadow: inset 0 0 0 calc(var(--scan-outline-width) + var(--space-1)) var(--scan-tint);
+}
+
+/* Item level: only the active item, lifted above its neighbors. */
+button[data-scan='item'] {
+  position: relative;
+  z-index: 1;
+  transform: scale(var(--scan-scale));
+}
+
+/* Back-out: same group, dashed and untinted, so "leave this row" never looks like "choose this row". */
+button[data-scan='back'] {
+  outline-style: dashed;
+}
+
+button[data-scan='dim'] {
+  opacity: var(--scan-dim-opacity);
+}
