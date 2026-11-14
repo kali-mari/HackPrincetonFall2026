@@ -8,7 +8,8 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 ## Color
 - **Fitzgerald Key fills**: soft pastels in the colors AAC users and therapists already know, so the board needs no relearning.
 - **People & pronouns `#FFF3A3` (yellow), verbs `#C9F2C2` (green), describing `#C9E2FF` (blue), nouns `#FFD8A8` (orange), social `#FFD4EA` (pink), negation `#FFC8C2` (red)**: black text on each is 14:1 to 19:1, well past AAA (7:1), so labels stay readable under classroom glare.
-- **Black text and 2px black tile borders**: maximum contrast, and tiles stay distinct even for color-blind viewers.
+- **Black text; 2px tile borders in a darker shade of the tile's own fill** (the fill mixed 50% with black): tiles stay distinct from the white page and from each other even for color-blind viewers, without a heavy black grid. Controls without a Fitzgerald fill keep a 2px black border.
+- **Speak is solid black with white text and a speaker icon**: the largest, darkest box on the board, so it is the most prominent control without adding a new color.
 - **White page**: the pastel tiles are the only color on the board, so category reads instantly.
 - **Caregiver palette (slate `#1E293B` on `#F6F8FA`, teal `#0F5257` accent)**: a calm, separate world so adults never confuse the dashboard with the child's board; all text pairs pass AAA.
 
@@ -23,7 +24,7 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 ## Typography
 - **Atkinson Hyperlegible**: designed by the Braille Institute so similar letters (I/l/1, O/0) never get mixed up.
 - **Tile labels 24px bold**: the required minimum, bold for distance reading.
-- **Sentence strip 40px**: above the 36px floor; this is the line the child and listeners read together.
+- **Sentence strip 40px**: above the 36px floor; this is the line the child and listeners read together. The strip is a white bar with a 4px black border; each word sits in a mini tile chip with its own Fitzgerald fill and darker border, so the sentence keeps the colors it was built from. Two rows of chips fit; when a sentence is longer, the oldest words scroll out of view at the top.
 - **Prediction row 28px**: sits between tile labels and the strip in importance.
 
 ## Spacing and size
@@ -32,5 +33,7 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 - **16px gaps**: enough to prevent mis-taps between neighbors without shrinking the grid.
 
 ## Motion
-- **One motion: the scanning highlight, 120ms**: the outline, dimming, and scale all change together, fast enough to keep up with switch scanning, slow enough to follow.
-- **Reduced motion**: under `prefers-reduced-motion`, every change is instant, with no scale and no dimming; the outline alone shows what is highlighted.
+- **The scanning highlight, 120ms**: the outline, dimming, and scale all change together, fast enough to keep up with switch scanning, slow enough to follow.
+- **Tile press, 120ms**: a tapped tile darkens and shrinks to 0.97, so the child sees the press land before audio plays. A tap clears the scan highlight, so the press never meets the 1.05 scan scale.
+- **Speaking pulse**: while audio plays, the sentence strip's border fades slowly between black and gray (1.2s). Gray, not violet, so it is never mistaken for the scan highlight.
+- **Reduced motion**: under `prefers-reduced-motion`, every change is instant, with no scale, no dimming, and no pulse; the outline alone shows what is highlighted, and a pressed tile only darkens.

@@ -26,10 +26,42 @@
   align-items: flex-end;
   overflow: hidden;
   padding: var(--space-1) var(--space-3);
+  border-width: var(--strip-border-width);
   font-size: var(--font-size-strip);
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-tight);
+  line-height: 1;
   text-align: start;
+}
+
+/* Two rows of 44px chips + an 8px gap fill the 96px inside the strip; extra rows overflow upward, so the newest words stay in view. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-end;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+}
+
+.chip {
+  padding: 0 var(--space-1);
+  border: var(--tile-border-width) solid color-mix(in srgb, var(--fill), var(--color-ink) var(--tile-border-mix));
+  border-radius: var(--chip-radius);
+  background: var(--fill);
+  white-space: nowrap;
+}
+
+/* The strip is disabled only while audio plays. */
+.strip:disabled {
+  animation: pulse var(--motion-pulse-duration) ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  to { border-color: var(--strip-pulse-color); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .strip:disabled { animation: none; }
 }
 
 /* Caregiver cell above grid column 4: gear + room for the /f5 clock, then the connection dot. */
@@ -205,6 +237,20 @@
   background: var(--color-ink);
   color: var(--color-page);
   font-size: var(--font-size-heading);
+}
+
+.speak svg {
+  width: var(--space-6);
+  height: var(--space-6);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.speak svg path:first-child {
+  fill: currentColor;
 }
 
 .spinner {

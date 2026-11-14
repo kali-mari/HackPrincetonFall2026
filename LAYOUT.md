@@ -31,7 +31,7 @@ x: 16    176 192                                                        1264
 
 | Region | Position (x, y) | Size | Notes |
 |---|---|---|---|
-| Sentence strip | 16, 0 | 568×120 | 40px text, wraps to 2 lines (~56 characters). Spans the tab column plus grid columns 1-3. Tapping it speaks the sentence. |
+| Sentence strip | 16, 0 | 568×120 | 40px words as Fitzgerald-colored chips, 2 rows; longer sentences keep the newest words in view. Spans the tab column plus grid columns 1-3. Tapping it speaks the sentence. |
 | Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then the demo clock (48×48), which opens a time picker; while a demo time is set, the clock is filled teal and every prediction uses that time. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not), then the current activity ("Lunch"). For one second after each switch message, the source name ("button", "touch", "voice") replaces the activity so the demo audience sees which input fired. |
 | Speak | 736, 0 | 256×120 | Double width; the most important action. |
 | Delete | 1008, 0 | 120×120 | Removes the last word. |

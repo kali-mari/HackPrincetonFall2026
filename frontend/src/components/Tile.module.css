@@ -1,6 +1,16 @@
+/* --fill is set per wordType below; the border is the same hue, darker. */
 .tile {
   flex-direction: column;
   gap: var(--space-1);
+  background: var(--fill);
+  border-color: color-mix(in srgb, var(--fill), var(--color-ink) var(--tile-border-mix));
+  transition-property: outline-color, opacity, transform, filter;
+}
+
+/* Press feedback, so the child sees the tap land before audio plays. A tap clears the scan, so this never meets the 1.05 scan scale. */
+.tile:active:not([data-scan]) {
+  filter: brightness(var(--tile-press-brightness));
+  transform: scale(var(--tile-press-scale));
 }
 
 .icon {
@@ -19,9 +29,9 @@
   font-weight: var(--font-weight-bold);
 }
 
-.person { background: var(--tile-people); }
-.verb { background: var(--tile-verb); }
-.describing { background: var(--tile-describe); }
-.noun { background: var(--tile-noun); }
-.social { background: var(--tile-social); }
-.negation { background: var(--tile-negation); }
+.person { --fill: var(--tile-people); }
+.verb { --fill: var(--tile-verb); }
+.describing { --fill: var(--tile-describe); }
+.noun { --fill: var(--tile-noun); }
+.social { --fill: var(--tile-social); }
+.negation { --fill: var(--tile-negation); }

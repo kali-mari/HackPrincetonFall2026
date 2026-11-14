@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { logSentence, predict, speak } from './api'
 import Tile from './components/Tile'
-import { CATEGORIES, CORE_WORDS, DEFAULT_PREDICTIONS, type Word } from './data/symbols'
+import { CATEGORIES, CORE_WORDS, DEFAULT_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
 import { useSwitchInput, type Source, type SourceSettings } from './useSwitchInput'
 import styles from './App.module.css'
+import tileStyles from './components/Tile.module.css'
 
 const SETTINGS_KEY = 'aac-input-sources'
 const HOME_KEY = 'aac-play-on-home'
@@ -32,6 +33,11 @@ function loadSettings(): SourceSettings {
 }
 
 type ScanItem = { key: string; action: () => void }
+
+// The sentence holds labels, so each strip chip looks up its tile's Fitzgerald color.
+const WORD_TYPES = new Map<string, WordType>(
+  [...CORE_WORDS, ...CATEGORIES.flatMap((c) => Object.values(c.slots))].map((w) => [w.label, w.wordType]),
+)
 
 const BOARD_WIDTH = 1280
 const BOARD_HEIGHT = 800
@@ -251,7 +257,13 @@ export default function App() {
           disabled={speaking}
           aria-label={`Sentence: ${text || 'empty'}. Tap to speak.`}
         >
-          <span>{text}</span>
+          <span className={styles.chips}>
+            {sentence.map((label, i) => (
+              <span key={i} className={`${styles.chip} ${tileStyles[WORD_TYPES.get(label) ?? '']}`}>
+                {label}
+              </span>
+            ))}
+          </span>
         </button>
 
         {/* Caregiver controls: never in the scan order. */}
@@ -300,7 +312,14 @@ export default function App() {
           aria-busy={speaking}
           data-scan={scanned('speak')}
         >
-          {speaking && <span className={styles.spinner} aria-hidden />}
+          {speaking ? (
+            <span className={styles.spinner} aria-hidden />
+          ) : (
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M4 9h4l5-4v14l-5-4H4z" />
+              <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+          )}
           {speaking ? 'Speaking' : 'Speak'}
         </button>
         {error && (

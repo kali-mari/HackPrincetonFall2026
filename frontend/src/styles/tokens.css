@@ -25,6 +25,9 @@
   --tile-negation: #ffc8c2; /* negation: red */
   --tile-border: #000000;
   --tile-border-width: 2px;
+  --tile-border-mix: 50%; /* tile border = its own fill mixed with this much ink: darker, same hue */
+  --tile-press-brightness: 0.85;
+  --tile-press-scale: 0.97;
 
   /* Scanning highlight: violet is outside the Fitzgerald set */
   --scan-color: #5b00d6;
@@ -64,6 +67,9 @@
   --tile-radius: 16px;
   --tile-symbol-size: 64px;
   --strip-min-height: 120px;
+  --strip-border-width: 4px;
+  --strip-pulse-color: color-mix(in srgb, var(--color-ink) 35%, var(--color-page)); /* not violet: never confused with scanning */
+  --chip-radius: 8px;
 
   /* Caregiver dashboard: calm slate + teal */
   --cg-bg: #f6f8fa;
@@ -79,12 +85,14 @@
   /* Motion: the only transition in the app */
   --motion-highlight-duration: 120ms;
   --motion-highlight-easing: cubic-bezier(0.2, 0, 0, 1);
+  --motion-pulse-duration: 1200ms; /* sentence strip border while audio plays */
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --motion-highlight-duration: 0ms;
     --scan-scale: 1;
+    --tile-press-scale: 1; /* the press still darkens */
     --scan-dim-opacity: 1; /* outline alone carries the highlight */
   }
 }
