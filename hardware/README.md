@@ -1,6 +1,6 @@
 # Hardware: switch board and serial bridge
 
-The Arduino reads five buttons and an optional sound sensor and prints one token per line over USB serial. `bridge.py` turns each line into a JSON message on the backend WebSocket `ws://localhost:8000/ws/input/`.
+The Elegoo UNO R3 (an Arduino Uno clone) reads five buttons and an optional sound sensor and prints one token per line over USB serial. `bridge.py` turns each line into a JSON message on the backend WebSocket `ws://localhost:8000/ws/input/`.
 
 - `aac_switch/aac_switch.ino`: the sketch for the demo.
 - `test/test.ino`: wiring check. It prints friendly messages and live sound levels, not the protocol.
@@ -23,7 +23,7 @@ Buttons use `INPUT_PULLUP`: wire each one between its pin and GND (pressed = LOW
 ## Upload the sketch
 
 1. Run `test/test.ino` first and check that every button prints when pressed.
-2. Open `aac_switch/aac_switch.ino` in the Arduino IDE, pick the board (Arduino Uno) and port, and upload. Or, with `arduino-cli`:
+2. Open `aac_switch/aac_switch.ino` in the Arduino IDE, pick the board **Arduino Uno** (the Elegoo UNO R3 uses the same board setting) and port, and upload. Or, with `arduino-cli`:
    ```sh
    arduino-cli compile --fqbn arduino:avr:uno hardware/aac_switch
    arduino-cli upload  --fqbn arduino:avr:uno -p <serial port> hardware/aac_switch

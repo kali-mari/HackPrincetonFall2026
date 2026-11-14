@@ -8,7 +8,7 @@ This is a 36 hour hackathon build. The demo path comes first. Keep code simple: 
 
 - `frontend/`: React + Vite + TypeScript. Symbol grid, sentence strip, prediction row, scanning highlight, input settings, caregiver dashboard.
 - `backend/`: Django + Django Channels (Python). One Django app, `aac`, holds views, profiles/events/labels in SQLite, the WebSocket consumer, and Bedrock, Polly, and Google Home integrations. UNO Q 4GB is the default Django/SQLite host; keep deployment configuration portable to a server.
-- `hardware/`: UNO R4 WiFi switch controller and serial bridge; UNO Q runs local transcription when the Conversation Mode stretch goal is implemented. Sketch in `hardware/aac_switch/`, bridge in `hardware/bridge.py`; see `hardware/README.md`.
+- `hardware/`: Elegoo UNO R3 switch controller and serial bridge; UNO Q runs local transcription when the Conversation Mode stretch goal is implemented. Sketch in `hardware/aac_switch/`, bridge in `hardware/bridge.py`; see `hardware/README.md`.
 
 ## Contracts (shared by all three folders; do not change without telling the team)
 
@@ -21,7 +21,7 @@ Backend runs on `http://localhost:8000`.
 
 Arduino to bridge: plain text lines over serial at 9600 baud, one token per line: `PREV`, `NEXT`, `SELECT`, `DELETE`, `SPEAK` (buttons), `VOICE` (vocal switch, sent as `SELECT`/`voice`), and legacy `TOUCH` (sent as `SELECT`/`touch`). Full table in `hardware/README.md`.
 
-Buttons (INPUT_PULLUP, wired to GND): PREV D2, NEXT D3, WORD/SELECT D4, DEL D5, SAY/SPEAK D6. Optional sound sensor (vocal switch) A0. No touch sensor or touchscreen in the current demo; sound input is optional. Legacy `TOUCH` serial and `touch` WebSocket values remain reserved for compatibility, not required hardware. Do not transfer R4 shield/voltage assumptions to UNO Q GPIO.
+Buttons (INPUT_PULLUP, wired to GND): PREV D2, NEXT D3, WORD/SELECT D4, DEL D5, SAY/SPEAK D6. Optional sound sensor (vocal switch) A0. No touch sensor or touchscreen in the current demo; sound input is optional. Legacy `TOUCH` serial and `touch` WebSocket values remain reserved for compatibility, not required hardware. Do not transfer UNO R3 shield/voltage (5V) assumptions to UNO Q GPIO.
 
 ## Backend conventions
 

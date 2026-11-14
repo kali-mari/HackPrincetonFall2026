@@ -1,4 +1,4 @@
-// Smart AAC Board - production switch sketch (Arduino Uno)
+// Smart AAC Board - production switch sketch (Elegoo UNO R3 / Arduino Uno)
 // Prints one protocol token per line at 9600 baud for hardware/bridge.py:
 //   D2 PREV -> PREV, D3 NEXT -> NEXT, D4 WORD -> SELECT, D5 DEL -> DELETE, D6 SAY -> SPEAK
 //   A0 sound sensor (optional vocal switch) -> VOICE
