@@ -89,7 +89,10 @@ class ContractTests(SimpleTestCase):
     def test_business_operations_are_explicitly_scaffolded(self):
         for path, methods in self.document["paths"].items():
             for operation in methods.values():
-                implemented = path.startswith('/api/profile/') or path in ("/api/docs", "/api/openapi.json")
+                implemented = path.startswith('/api/profile/') or path in (
+                    "/api/docs", "/api/openapi.json", "/api/aac/events",
+                    "/api/aac/patients/{id}/events", "/api/log",
+                )
                 self.assertEqual(
                     operation["x-implementation-status"],
                     "implemented" if implemented else "scaffolded",

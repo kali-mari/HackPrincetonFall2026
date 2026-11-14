@@ -1,0 +1,25 @@
+{
+  "description": "Synthetic confirmed speech for the demo patient. days_ago and local hour are relative to when seed_demo first runs.",
+  "spoken": [
+    {"text": "Good morning", "activity": "breakfast", "days_ago": 1, "hour": 7},
+    {"text": "I want juice", "activity": "breakfast", "days_ago": 1, "hour": 7},
+    {"text": "More please", "activity": "breakfast", "days_ago": 2, "hour": 8},
+    {"text": "I want juice", "activity": "breakfast", "days_ago": 3, "hour": 7},
+    {"text": "All done", "activity": "breakfast", "days_ago": 3, "hour": 8},
+    {"text": "I want water", "activity": "lunch", "days_ago": 1, "hour": 12},
+    {"text": "I am hungry", "activity": "lunch", "days_ago": 1, "hour": 12},
+    {"text": "More please", "activity": "lunch", "days_ago": 2, "hour": 12},
+    {"text": "I want water", "activity": "lunch", "days_ago": 4, "hour": 13},
+    {"text": "All done", "activity": "lunch", "days_ago": 4, "hour": 13},
+    {"text": "Let's play blocks", "activity": "play", "days_ago": 1, "hour": 15},
+    {"text": "My turn", "activity": "play", "days_ago": 1, "hour": 15},
+    {"text": "Help me", "activity": "play", "days_ago": 2, "hour": 16},
+    {"text": "My turn", "activity": "play", "days_ago": 3, "hour": 15},
+    {"text": "I want a break", "activity": "play", "days_ago": 5, "hour": 16},
+    {"text": "Read a book", "activity": "bedtime", "days_ago": 1, "hour": 19},
+    {"text": "I am tired", "activity": "bedtime", "days_ago": 2, "hour": 20},
+    {"text": "Good night", "activity": "bedtime", "days_ago": 2, "hour": 20},
+    {"text": "Read a book", "activity": "bedtime", "days_ago": 6, "hour": 19},
+    {"text": "Thank you", "activity": "play", "days_ago": 6, "hour": 15}
+  ]
+}

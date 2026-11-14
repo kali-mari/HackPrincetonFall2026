@@ -1,7 +1,7 @@
 """OpenAPI contracts with explicit per-operation implementation status.
 
 Keep schemas explicit and export with `python manage.py export_openapi`.
-Profiles are implemented; unfinished AAC/learning routes remain JSON 501 scaffolds.
+Profiles and event history are implemented; unfinished AAC/learning routes remain JSON 501 scaffolds.
 """
 
 from copy import deepcopy
@@ -228,7 +228,7 @@ SCHEMAS = {
             "timestamp": TIME,
             "received_at": TIME,
             "activity": nullable(text(100)),
-            "input_source": enum("button", "keyboard"),
+            "input_source": nullable(enum("button", "keyboard")),
             "prediction_id": nullable(UUID),
             "candidate_index": nullable(
                 {"type": "integer", "minimum": 0, "maximum": 5}
@@ -691,7 +691,7 @@ def build_openapi():
         implemented=True,
         errors=(400, 404, 405, 503),
         status=204,
-        description="Atomically delete patient and caregiver links, preserving caregivers and other patients. Later patient-owned tables must cascade and extend deletion tests as implemented; events, labels, predictions and artifacts are not implemented yet. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
+        description="Atomically delete patient and caregiver links, preserving caregivers and other patients. Also deletes the patient's communication events and prediction records. Later patient-owned tables must cascade and extend deletion tests as implemented; labels and artifacts are not implemented yet. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
     )
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
@@ -733,7 +733,8 @@ def build_openapi():
         request="LegacyLogRequest",
         result="LegacyLogResponse",
         errors=(400, 405, 503),
-        description="Preserve request shape; success shape is now specified as 200 {ok:true}. SQLite replaces the earlier DynamoDB storage decision. Fixed demo patient. No retry key: blind retries may duplicate speech history.",
+        implemented=True,
+        description="Preserve request shape; success shape is now specified as 200 {ok:true}. Saves a spoken event in SQLite for the fixed LEGACY_DEMO_PATIENT_ID patient, with new server-generated event/utterance IDs, null activity and null input_source. No retry key: blind retries duplicate speech history. 503 if storage is unavailable or the demo patient has not been created with seed_demo.",
         request_example={"text": SIX[0], "timestamp": NOW},
         response_example={"ok": True},
     )
@@ -796,7 +797,8 @@ def build_openapi():
                 {"event_id": IDS["event"]},
             )
         },
-        description="event_id is globally unique; identical normalized retries return 200, changed payload returns 409. Same utterance_id links selection, spoken and feedback for one patient; intentional repeated speech uses new utterance/event IDs. At most one spoken event per utterance (409 otherwise). For prediction attribution, text/index must match the same patient's saved prediction. Feedback always identifies a candidate. No raw transcripts accepted.",
+        implemented=True,
+        description="event_id is globally unique; identical normalized retries return 200, changed payload returns 409. Unknown patient, or a prediction_id not saved for this patient, returns 404; text that differs from the referenced candidate returns 400. Reusing an utterance_id for another patient returns 409. time_bucket is computed from the patient's timezone at event time. Same utterance_id links selection, spoken and feedback for one patient; intentional repeated speech uses new utterance/event IDs. At most one spoken event per utterance (409 otherwise). For prediction attribution, text/index must match the same patient's saved prediction. Feedback always identifies a candidate. No raw transcripts accepted.",
         request_example=event_request,
         response_example={"event_id": IDS["event"]},
     )
@@ -809,7 +811,9 @@ def build_openapi():
         "Read patient history",
         result="EventPage",
         parameters=PAGE_PARAMETERS,
-        description="Newest first by (timestamp,event_id); cursor is bound to patient and sort order.",
+        errors=(400, 404, 405, 503),
+        implemented=True,
+        description="Newest first by (timestamp,event_id); signed cursor is bound to patient and sort order. Unknown or caregiver ID returns 404. input_source is null only for legacy /api/log entries.",
         response_example={"events": [event_result], "next_cursor": None},
     )
 
@@ -1043,7 +1047,7 @@ def build_openapi():
         "Read this OpenAPI document",
         implemented=True,
         errors=(405,),
-        description="Implemented documentation endpoint; profiles are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
+        description="Implemented documentation endpoint; profiles, event history and /api/log are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
     )
     paths["/api/openapi.json"]["get"]["responses"]["200"] = {
         "description": "OpenAPI 3.1 JSON document",
@@ -1059,7 +1063,7 @@ def build_openapi():
         errors=(405,),
     )
     paths["/api/docs"]["get"]["responses"]["200"] = {
-        "description": "Swagger UI with vendored assets; Try it out executes implemented profiles and remaining scaffolds",
+        "description": "Swagger UI with vendored assets; Try it out executes implemented operations and remaining scaffolds",
         "content": {"text/html": {"schema": {"type": "string"}}},
     }
     return deepcopy(
@@ -1068,7 +1072,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation and six profile operations are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history and legacy /api/log are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {

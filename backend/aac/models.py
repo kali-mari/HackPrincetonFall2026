@@ -79,3 +79,76 @@ class CaregiverPatient(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class PredictionRecord(models.Model):
+    """Six phrases shown to a patient; only what event attribution needs."""
+
+    class Source(models.TextChoices):
+        JEV = 'jev'
+        AI = 'ai'
+        HISTORY = 'history'
+        DEFAULT = 'default'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='predictions')
+    activity = models.CharField(max_length=100, null=True, blank=True)
+    time_bucket = models.CharField(max_length=9)
+    phrases = models.JSONField()
+    source = models.CharField(max_length=7, choices=Source.choices)
+    artifact_version = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['patient', 'created_at'], name='prediction_patient_created')]
+
+
+class CommunicationEvent(models.Model):
+    """An explicit patient action. The primary key is the client's retry key."""
+
+    class Kind(models.TextChoices):
+        SELECTION = 'selection'
+        SPOKEN = 'spoken'
+        FEEDBACK = 'feedback'
+
+    id = models.UUIDField(primary_key=True, editable=False)
+    utterance_id = models.UUIDField()
+    patient = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='events')
+    kind = models.CharField(max_length=9, choices=Kind.choices)
+    text = models.CharField(max_length=500)
+    occurred_at = models.DateTimeField()
+    received_at = models.DateTimeField(auto_now_add=True)
+    activity = models.CharField(max_length=100, null=True, blank=True)
+    time_bucket = models.CharField(max_length=9)
+    # Null only for legacy /api/log entries, which do not report an input source.
+    input_source = models.CharField(max_length=8, null=True, blank=True)
+    # RESTRICT still lets a patient deletion cascade through both tables.
+    prediction = models.ForeignKey(
+        PredictionRecord, on_delete=models.RESTRICT, null=True, blank=True, related_name='events',
+    )
+    candidate_index = models.PositiveSmallIntegerField(null=True, blank=True)
+    outcome = models.CharField(max_length=8, null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['patient', 'occurred_at', 'id'], name='event_patient_time')]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(kind__in=['selection', 'spoken', 'feedback']), name='event_kind'),
+            models.CheckConstraint(
+                condition=models.Q(input_source__isnull=True) | models.Q(input_source__in=['button', 'keyboard']),
+                name='event_input_source',
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(prediction__isnull=True, candidate_index__isnull=True)
+                           | models.Q(prediction__isnull=False, candidate_index__lte=5)),
+                name='event_prediction_pair',
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(kind='feedback', outcome__in=['accepted', 'rejected'], prediction__isnull=False)
+                           | (~models.Q(kind='feedback') & models.Q(outcome__isnull=True))),
+                name='event_feedback_outcome',
+            ),
+            models.CheckConstraint(condition=~models.Q(text=''), name='event_nonempty_text'),
+            models.UniqueConstraint(
+                fields=['utterance_id'], condition=models.Q(kind='spoken'), name='one_spoken_per_utterance',
+            ),
+        ]

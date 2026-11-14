@@ -2,14 +2,14 @@
 
 ## Status and scope
 
-**Data/API design; mostly not yet implemented.** Only the profile records (`Profile`, `CaregiverPatient`) and their six operations are implemented. The executable contract definition is `backend/aac/openapi.py`; see [api-contracts.md](api-contracts.md) for Swagger UI, export, validation, and implementation status. This outline describes caregiver/patient profiles, local data storage, AAC prediction, and learning from labeled inputs.
+**Data/API design; mostly not yet implemented.** Implemented so far: profile records (`Profile`, `CaregiverPatient`) and their six operations, plus `CommunicationEvent`, a minimal `PredictionRecord`, event recording/history and legacy `/api/log`. The executable contract definition is `backend/aac/openapi.py`; see [api-contracts.md](api-contracts.md) for Swagger UI, export, validation, and implementation status. This outline describes caregiver/patient profiles, local data storage, AAC prediction, and learning from labeled inputs.
 
 Keep the current `profile` / `aac` / `learn` design. [Label vocabulary and creation workflow](label-vocabulary.md) specifies the agreed labeling direction: fixed starter categories/values, patient-specific caregiver extensions, and AI proposals requiring caregiver approval. The sections below incorporate that refinement without redesigning the system.
 
 The agreed storage/hardware direction below is implemented in the sequence defined by the consolidated [MVP implementation plan](mvp-phase-plan.md):
 
 - Preserve existing `/api/speak`, `/api/predict`, `/api/log` request shapes and `/ws/input/` messages. Specify `/api/log` success as `200 { "ok": true }`; its persistence changes to SQLite, not DynamoDB.
-- Add the namespaced profile/AAC/learning contracts described below. Profile routes are implemented; AAC, learning and legacy routes are scaffolded (JSON 501).
+- Add the namespaced profile/AAC/learning contracts described below. Profile routes, event recording/history and `/api/log` are implemented; the other AAC, learning and legacy routes are scaffolded (JSON 501).
 - UNO R4 WiFi handles physical buttons. UNO Q 4GB hosts Django and the SQLite application database, with local transcription as a benchmark-dependent stretch goal. No touchscreen or touch sensor; keyboard fallback remains required.
 - Keep one Django app (`aac`) with plain function views. Namespaces describe responsibilities, not separate services or Django apps.
 - Use one relational database plus JSON fields and local files; no object database, object storage service, or dual-write synchronization for the hackathon. The same application may later run on a server behind Caddy via deployment settings; do not share a SQLite file over the network.
@@ -113,7 +113,7 @@ Example explicit event write:
 ```
 
 - `kind`: `selection`, `spoken`, or `feedback`; all require nonempty `text`. Feedback also requires `outcome: accepted | rejected`, `prediction_id`, and `candidate_index` (0–5), identifying an actual phrase for that patient/prediction.
-- `input_source`: `button` or `keyboard`. No touch input is configured; legacy WebSocket source values remain unchanged for compatibility.
+- `input_source`: `button` or `keyboard` on write. Stored events from legacy `/api/log` have `null`, since that route has no source field. No touch input is configured; legacy WebSocket source values remain unchanged for compatibility.
 - `prediction_id` and `candidate_index` are optional as a pair for manually composed/edited phrases. When supplied, validate patient ownership, index, and exact phrase match.
 - The client generates a new `event_id` for each event. Identical normalized retries return the existing ID with `200`; reuse with different content returns `409`.
 - Required `utterance_id` links selection, speech and feedback for one intended utterance. Repeated intentional speech uses a new utterance/event ID. Reject a second distinct spoken event for the same utterance with `409`; count completed utterances once in ranking.

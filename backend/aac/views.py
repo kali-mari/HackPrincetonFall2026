@@ -1,15 +1,24 @@
 """Plain function views; unfinished AAC/learning features remain explicit 501s."""
 
+import uuid
+
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .http import check_method, error_response, read_json_object, scaffold_response
-from .models import CaregiverPatient, Profile
+from .history import (
+    Conflict, event_cursor, event_json, read_event_cursor, same_event, time_bucket, validate_event,
+)
+from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Profile
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
-from .validation import InvalidRequest, query_limit, validate_fields, validate_string, validate_uuid
+from .validation import (
+    InvalidRequest, query_limit, validate_fields, validate_string, validate_timestamp, validate_uuid,
+)
 
 
 @csrf_exempt
@@ -122,14 +131,82 @@ def predict(request):
     return scaffold_response(request, {"POST": "predict"})
 
 
+def save_event(data):
+    """Create a validated event, or return the identical stored retry (created=False)."""
+    with transaction.atomic():
+        existing = CommunicationEvent.objects.filter(pk=data['id']).first()
+        if existing is not None:
+            if not same_event(existing, data):
+                raise Conflict('event_id was already used for a different event.')
+            return existing, False
+        patient = Profile.objects.get(pk=data['patient_id'], role=Profile.Role.PATIENT)
+        if data['prediction_id'] is not None:
+            prediction = PredictionRecord.objects.get(pk=data['prediction_id'], patient=patient)
+            if prediction.phrases[data['candidate_index']] != data['text']:
+                raise InvalidRequest('text does not match the predicted candidate.')
+        utterance = CommunicationEvent.objects.filter(utterance_id=data['utterance_id'])
+        if utterance.exclude(patient=patient).exists():
+            raise Conflict('utterance_id belongs to a different patient.')
+        if data['kind'] == 'spoken' and utterance.filter(kind='spoken').exists():
+            raise Conflict('This utterance already has a spoken event.')
+        event = CommunicationEvent.objects.create(
+            time_bucket=time_bucket(data['occurred_at'], patient.timezone), **data,
+        )
+        return event, True
+
+
 @csrf_exempt
 def events(request):
-    return scaffold_response(request, {"POST": "recordEvent"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        data = validate_event(read_json_object(request))
+        try:
+            event, created = save_event(data)
+        except IntegrityError:
+            # A concurrent write won the race; answer as if it had arrived first.
+            event = CommunicationEvent.objects.filter(pk=data['id']).first()
+            if event is None or not same_event(event, data):
+                raise Conflict('Event conflicts with a concurrent write.') from None
+            created = False
+        return JsonResponse({'event_id': str(event.pk)}, status=201 if created else 200)
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    except Profile.DoesNotExist:
+        return error_response('not_found', 'Patient not found.', 404)
+    except PredictionRecord.DoesNotExist:
+        return error_response('not_found', 'Prediction not found for this patient.', 404)
+    except Conflict as error:
+        return error_response('conflict', str(error), 409)
+    except DatabaseError:
+        return error_response('unavailable', 'Event storage is unavailable.', 503)
 
 
 @csrf_exempt
 def patient_events(request, id):
-    return scaffold_response(request, {"GET": "listEvents"})
+    response = check_method(request, ('GET',))
+    if response is not None:
+        return response
+    try:
+        validate_fields(request.GET, allowed={'limit', 'cursor'})
+        limit = query_limit(request.GET)
+        after = read_event_cursor(request.GET, id)
+        patient = Profile.objects.get(pk=id, role=Profile.Role.PATIENT)
+        rows = CommunicationEvent.objects.filter(patient=patient)
+        if after is not None:
+            timestamp, event_id = after
+            rows = rows.filter(Q(occurred_at__lt=timestamp) | Q(occurred_at=timestamp, id__lt=event_id))
+        rows = list(rows.order_by('-occurred_at', '-id')[:limit + 1])
+        page = rows[:limit]
+        cursor = event_cursor(id, page[-1]) if len(rows) > limit else None
+        return JsonResponse({'events': [event_json(row) for row in page], 'next_cursor': cursor})
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    except Profile.DoesNotExist:
+        return error_response('not_found', 'Patient not found.', 404)
+    except DatabaseError:
+        return error_response('unavailable', 'Event storage is unavailable.', 503)
 
 
 @csrf_exempt
@@ -181,4 +258,24 @@ def legacy_predict(request):
 
 @csrf_exempt
 def legacy_log(request):
-    return scaffold_response(request, {"POST": "legacyLog"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        payload = read_json_object(request)
+        validate_fields(payload, allowed={'text', 'timestamp'}, required={'text', 'timestamp'})
+        text = validate_string(payload['text'], 'text', max_length=500)
+        occurred_at = validate_timestamp(payload['timestamp'], 'timestamp')
+        patient = Profile.objects.get(pk=settings.LEGACY_DEMO_PATIENT_ID, role=Profile.Role.PATIENT)
+        # No retry key in this contract: every call is a new utterance.
+        CommunicationEvent.objects.create(
+            id=uuid.uuid4(), utterance_id=uuid.uuid4(), patient=patient, kind='spoken', text=text,
+            occurred_at=occurred_at, time_bucket=time_bucket(occurred_at, patient.timezone),
+        )
+        return JsonResponse({'ok': True})
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    except Profile.DoesNotExist:
+        return error_response('unavailable', 'Demo patient is not set up; run seed_demo.', 503)
+    except DatabaseError:
+        return error_response('unavailable', 'Event storage is unavailable.', 503)
