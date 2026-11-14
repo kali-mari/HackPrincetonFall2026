@@ -13,7 +13,7 @@ const bool DEBUG = false;
 // SOUND_THRESHOLD for SOUND_HOLD_MS. Dips shorter than SOUND_GAP_MS do not reset the
 // timer (the sensor output wobbles even during a steady sound). After firing, the level
 // must stay below the threshold for SOUND_GAP_MS before it can fire again.
-const int SOUND_THRESHOLD = 400;
+const int SOUND_THRESHOLD = 1024; // 1024 = off: no sound sensor on A0 (the voice switch uses the webcam mic); a floating A0 reads ~300 and drifts
 const unsigned long SOUND_HOLD_MS = 500;
 const unsigned long SOUND_GAP_MS = 100;
 
