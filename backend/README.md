@@ -4,7 +4,7 @@ Django project: `config`. Application: `aac` (augmentative and alternative commu
 
 **Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution, Phase 4 deterministic predictions: `POST /api/aac/predict` and legacy `POST /api/predict`, and Phase 5 speech: `POST /api/aac/speak` and legacy `POST /api/speak` through a provider-neutral text-to-speech module (ElevenLabs first), with audio caching, a `cleanup_audio` command and optional Google Home casting.
 
-**Still scaffolded:** the 9 learning operations return JSON 501. Channels/WebSocket relay and Bedrock are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
+**Still scaffolded:** the 9 learning operations return JSON 501. Channels/WebSocket relay is not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
 
 Follow the consolidated [MVP implementation plan](../docs/mvp-phase-plan.md), [API contracts/status](../docs/api-contracts.md) and [data outline](../docs/data-outline.md).
 
@@ -89,6 +89,23 @@ With `SPEECH_CACHE=true`, the file name is a SHA-256 hash of provider, model, vo
 
 Casting (`aac/casting.py`, PyChromecast) connects straight to `GOOGLE_HOME_HOST` without network discovery, in a background thread with 5-second bounds, after the audio URL is ready. It never delays or changes the HTTP response, and failures are logged without the URL or sentence. The speaker must reach `BACKEND_PUBLIC_BASE_URL` (a LAN address in `DJANGO_ALLOWED_HOSTS`). When casting is on, configure the frontend not to also play locally, to avoid double playback. Casting has not been tested against a real speaker yet. The 11 remaining scaffolds still validate transport only and return 501 even for `{}` or invalid field/query values.
 
+## AI predictions
+
+`aac/llm.py` adds optional AI phrases to both prediction routes. Set in `backend/.env`:
+
+| Provider | `PREDICT_PROVIDER` | Credentials | `PREDICT_MODEL` |
+| --- | --- | --- | --- |
+| OpenAI, or any OpenAI-compatible API | `openai` | `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for OpenRouter, Groq, xAI, Mistral, Ollama, ...) | required |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | optional, defaults to `claude-haiku-5-5` |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | required |
+| Amazon Bedrock (any Converse text model) | `bedrock` | standard AWS credentials (`aws login`, `AWS_PROFILE`, keys) and `AWS_REGION` | required: model or inference profile ID |
+
+Blank `PREDICT_PROVIDER` turns AI off. Pick a fast model ID from your provider's model list: answers slower than `PREDICT_TIMEOUT_SECONDS` (default 2) are dropped, and reasoning-heavy models often miss that. Only the selected provider's SDK is imported.
+
+A provider is a function `(system, prompt, model) -> text` that raises on failure; register it in `PROVIDERS`. The rest is shared: the history/default phrases are computed first and sent with `activity`, time bucket and `recent` as JSON data; the call runs on a small thread pool and the view waits at most the deadline (SDK timeouts are only a 10-second safeguard, and SDK retries are off). Output must be exactly six unique, nonblank, single-line phrases of at most 100 characters, otherwise the fallback is used; there is no repair call. At most 4 calls run at once, so a slow provider can't pile up threads. Prompts, responses and keys are never logged.
+
+Prediction tests force `PREDICT_PROVIDER=''`, so a provider in your `.env` is never called by `manage.py test`.
+
 ## Checks and tests
 
 ```sh
@@ -148,7 +165,8 @@ aac/
   validation.py             Explicit value/field/query helpers; no ORM access
   consumers.py, routing.py  Future WebSocket relay
   speech.py                 Provider-neutral TTS (ElevenLabs), caching and audio files
-  predictions.py            Deterministic ranking and defaults (Bedrock later)
+  predictions.py            Deterministic ranking and defaults
+  llm.py                    Optional AI predictions (OpenAI, Anthropic, Gemini, Bedrock) with deadline and fallback
   casting.py                Optional background Google Home casting
   management/commands/      Schema export, seed_demo and cleanup_audio
   migrations/               Application migrations (0001 profiles, 0002 history)
@@ -157,4 +175,4 @@ seed/                       Synthetic demo history loaded by seed_demo
 media/audio/                Ignored generated audio
 ```
 
-Add Channels/Daphne and boto3 (Bedrock) when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 6 Channels/WebSocket relay or Phase 7 labels; the bridge and buttons are owned separately.
+Add Channels/Daphne when the input relay is implemented, not for empty placeholders. Next backend slice: Phase 6 Channels/WebSocket relay or Phase 7 labels; the bridge and buttons are owned separately.

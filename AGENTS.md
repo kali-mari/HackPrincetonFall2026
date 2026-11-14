@@ -7,7 +7,7 @@ This is a 36 hour hackathon build. The demo path comes first. Keep code simple: 
 ## Repo layout
 
 - `frontend/`: React + Vite + TypeScript. Symbol grid, sentence strip, prediction row, scanning highlight, input settings, caregiver dashboard.
-- `backend/`: Django + Django Channels (Python). One Django app, `aac`, holds views, profiles/events/labels in SQLite, the WebSocket consumer, and Bedrock, Polly, and Google Home integrations. UNO Q 4GB is the default Django/SQLite host; keep deployment configuration portable to a server.
+- `backend/`: Django + Django Channels (Python). One Django app, `aac`, holds views, profiles/events/labels in SQLite, the WebSocket consumer, and AI prediction, text-to-speech, and Google Home integrations. UNO Q 4GB is the default Django/SQLite host; keep deployment configuration portable to a server.
 - `hardware/`: UNO R4 WiFi switch controller and serial bridge; UNO Q runs local transcription when the Conversation Mode stretch goal is implemented. Existing sketch/bridge protocol remains unchanged.
 
 ## Contracts (shared by all three folders; do not change without telling the team)
@@ -53,8 +53,8 @@ Only work on this after the core demo path works end to end. It is not required 
 
 ## Rules
 
-- AWS credentials live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
-- Bedrock: use a fast Claude Haiku model. Ask for JSON with exactly 6 phrases. If the call fails or takes over 2 seconds, fall back to the most frequent phrases for that time of day.
+- AI-provider, AWS and speech credentials live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
+- AI predictions: provider-neutral `aac/llm.py`, selected by `PREDICT_PROVIDER` (`openai`, `anthropic`, `gemini` or `bedrock`; blank = off) with `PREDICT_MODEL`. Use a fast model (default for `anthropic` is Claude Haiku). Ask for JSON with exactly 6 phrases. If the call fails, returns invalid output or takes over 2 seconds, fall back to the history/default phrases.
 - Polly: neural engine, a child sounding voice.
 - UI: large readable targets (at least 120px), high contrast, an unmistakable scanning highlight. Button and keyboard access are required; touch hardware is not.
 - Keyboard fallback always works: Space = NEXT, Enter = SELECT.

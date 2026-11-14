@@ -10,7 +10,7 @@
 | Shared transport/value helpers | Implemented and tested; used by the profile routes |
 | Profile routes (6 operations) | Implemented: SQLite persistence, field/query/cursor validation, role scoping, 503 on storage failure |
 | Event history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events`, `POST /api/log` | Implemented: SQLite persistence, retry safety, prediction attribution checks |
-| Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults; no cloud access |
+| Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults, plus optional AI (OpenAI, Anthropic, Gemini or Bedrock) with a 2-second fallback |
 | Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting |
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Message contract documented; consumer not implemented |
@@ -46,6 +46,7 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 - Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
 - Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
 - `source` is `history` when any phrase came from history, otherwise `default`. `artifact_version` is always null for now.
+- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent` and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output replaces the phrases and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Response shapes are unchanged, and `recent` is still never stored.
 - `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
 - `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 
