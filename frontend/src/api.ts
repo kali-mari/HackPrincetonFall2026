@@ -29,13 +29,43 @@ export function localIso(date: Date): string {
   return `${local}${offset >= 0 ? '+' : '-'}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`
 }
 
-// activity is optional: the CLAUDE.md contract only promises phrases. Rejects anything but exactly 6 strings.
+// School-day schedule: [start minute of the day, activity]. Names match backend/seed/demo_history.json where they overlap.
+const SCHEDULE: [number, string][] = [
+  [0, 'breakfast'],
+  [8 * 60 + 30, 'class'],
+  [10 * 60 + 30, 'recess'],
+  [11 * 60, 'class'],
+  [11 * 60 + 45, 'lunch'],
+  [12 * 60 + 45, 'class'],
+  [15 * 60, 'play'],
+  [18 * 60, 'dinner'],
+  [19 * 60, 'bedtime'],
+]
+
+export function activityAt(date: Date): string {
+  const minute = date.getHours() * 60 + date.getMinutes()
+  return SCHEDULE.findLast(([start]) => start <= minute)![1]
+}
+
+// The backend requires a nonempty activity and does not echo it, so the schedule supplies it. Rejects anything but exactly 6 strings.
 export async function predict(time: Date, recent: string[]): Promise<{ phrases: string[]; activity: string }> {
-  const res = await post('/api/predict', { time: localIso(time), activity: '', recent })
-  const data = await res.json()
-  const phrases = data?.phrases
+  const activity = activityAt(time)
+  const res = await post('/api/predict', { time: localIso(time), activity, recent })
+  const phrases = (await res.json())?.phrases
   if (!Array.isArray(phrases) || phrases.length !== 6 || !phrases.every((p) => typeof p === 'string')) {
     throw new Error('/api/predict returned something other than 6 phrases')
   }
-  return { phrases, activity: typeof data.activity === 'string' ? data.activity : '' }
+  return { phrases, activity }
+}
+
+export type LogEvent = { event_id: string; kind: string; text: string; timestamp: string; activity: string | null }
+
+export const DEMO_PATIENT_ID = '22222222-2222-4222-8222-222222222222' // LEGACY_DEMO_PATIENT_ID: where POST /api/log writes
+
+// Newest first. shortcut: one page of 100 events, page with next_cursor if a day ever exceeds that.
+export async function events(): Promise<LogEvent[]> {
+  const path = `/api/aac/patients/${DEMO_PATIENT_ID}/events?limit=100`
+  const res = await fetch(path, { signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) throw new Error(`${path} failed with ${res.status}`)
+  return ((await res.json()) as { events: LogEvent[] }).events
 }
