@@ -1,4 +1,4 @@
-# MVP implementation phase plan
+# MVP implementation plan
 
 ## Goal and current state
 
@@ -15,7 +15,7 @@ Caregiver sets up a patient
 
 UNO R4 WiFi handles buttons; UNO Q 4GB hosts Django and SQLite. Keyboard fallback is always Space = NEXT, Enter = SELECT. No touchscreen or touch sensor is required.
 
-**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Documentation endpoints work. Business features, models/migrations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
+**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Business features and endpoint-specific validation, models/migrations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
 
 References:
 
@@ -24,7 +24,67 @@ References:
 - [Label vocabulary](label-vocabulary.md): definitions, assignments and review rules.
 - `backend/aac/openapi.py`: executable request/response contract source.
 
-This is the implementation sequence going forward. It supersedes the ordering in the historical [backend MVP plan](backend-mvp-plan.md), not the agreed API contracts.
+This is the single implementation plan for backend, frontend and hardware. It combines the current phase sequence with the compatible implementation guidance from the former backend MVP plan. The old standalone plan has been retired; its DynamoDB, single-persona-only scope and speech-first ordering do not apply.
+
+This document governs implementation sequence, not API definitions. Exact request/response shapes, limits and statuses remain in `backend/aac/openapi.py`, explained by the references above. Resolve discrepancies against those agreed contracts; do not revive older proposals or maintain a second hand-edited schema.
+
+## Architecture and ownership
+
+```text
+Frontend -- HTTP --> Django function views --> Django ORM --> SQLite on UNO Q
+                              |--> Polly --> local audio files
+                              |--> optional bounded Bedrock predictions/analysis
+Frontend <-- WS --> Channels input group <-- WS --> serial bridge <-- R4 WiFi
+Google Home <-- LAN audio URL + optional Cast command -- backend
+```
+
+- **Frontend:** symbols, sentence construction, scanning, keyboard fallback, setup/input settings, explicit Speak, playback and completed-playback event submission. Use readable targets of at least 120px, high contrast and an unmistakable scanning highlight.
+- **Backend:** field/relationship validation, profiles, speech generation, event persistence, prediction ranking, caregiver labels and optional casting/AI. No implicit success event inside speech generation.
+- **Bridge:** serial-to-WebSocket translation and bounded reconnect behavior.
+- **R4 WiFi:** button debounce and the fixed serial protocol. Optional sustained-sound detection is an input switch, not transcription. Do not transfer R4 shield/voltage assumptions to UNO Q GPIO.
+- **UNO Q:** default Django/SQLite host. Conversation processing is local-only stretch scope, not part of the input relay.
+
+The single `input` group controls one active board; it is not multi-patient session routing. Run one ASGI process with the in-memory channel layer. Keep synchronous cloud SDK calls out of the WebSocket event loop.
+
+## Dependencies and focused modules
+
+Own small application functions for validation, ranking, fallback, prompts and file handling. Use libraries for protocols, AWS signing and speech/model engines; do not reinvent them.
+
+| Direct runtime dependency | Purpose |
+| --- | --- |
+| Django | HTTP, ORM/migrations, settings, commands and tests |
+| channels | Existing WebSocket group relay |
+| daphne | ASGI server; first in `INSTALLED_APPS` for WebSocket-capable `runserver` |
+| django-cors-headers | Development CORS for `http://localhost:5173` |
+| python-dotenv | Load ignored `backend/.env` without a custom parser |
+| boto3 | Polly and Bedrock when those phases are implemented; no DynamoDB |
+
+Pin compatible versions and add dependencies only when used. Keep optional `pychromecast` isolated, for example in `requirements-cast.txt`. Development schema validators/test tooling belong in development requirements.
+
+Use built-ins: `json`, `datetime`/`zoneinfo`, collections, `pathlib`, `uuid`, optional `hashlib`, `logging`, `unittest.mock`, `concurrent.futures` and `time.monotonic`. No DRF, Pydantic, LangChain, Celery, Redis, vector database, cloud-emulation stack, repository framework or autonomous agent framework.
+
+Evolve the existing project rather than recreating it. Keep one `aac` app with focused modules as needed:
+
+```text
+backend/
+  config/                    # settings, HTTP URLs and ASGI
+  aac/
+    openapi.py               # existing executable contract source
+    models.py                # ORM records introduced by each slice
+    migrations/
+    views.py                 # thin handlers and small transport/validation helpers
+    consumers.py, routing.py # input relay only
+    speech.py                # Polly and temporary audio files
+    predictions.py           # deterministic ranking, bounded AI and fallback
+    history.py               # shared ORM event persistence/query logic, if needed
+    casting.py               # optional isolated speaker integration
+    management/commands/     # repeatable seeds; audio cleanup when needed
+    tests/                   # contract, feature, persistence and relay tests
+  seed/                      # synthetic demo fixtures
+  media/audio/               # generated files; ignored by git
+```
+
+These are modules, not new services or mandatory abstractions. Create files only when a phase needs them. Create cloud clients lazily and reuse them; startup and tests must not require working AWS access.
 
 ## Priorities and sequencing
 
@@ -59,6 +119,8 @@ This is the implementation sequence going forward. It supersedes the ordering in
 - Do not change Codex's `hardware/benchmarks/transcription/` work unless explicitly assigned. Use synthetic demo data and keep databases, generated audio and secrets out of git/logs.
 
 ## Phase 1 — Runtime foundation and frontend shell
+
+**Status:** backend runtime configuration and shared transport/value-validation slices implemented; Phase 1 is not yet complete. Setup, variables and validator usage are documented in [backend/README.md](../backend/README.md). Frontend shell and Channels/Daphne/input setup remain pending. Business operations still validate transport only and remain scaffolded; endpoint-specific fields/relationships/cursors are implemented with each feature, not by the shared helpers. No API schema/status changes were introduced by these foundation slices.
 
 **Build:**
 
@@ -113,6 +175,8 @@ Integrate Phase 3 attribution checks with actual prediction responses: predictio
 
 **Build:** Polly neural speech in `speech.py`, temporary MP3 files with server-generated names and absolute playable URLs. Create clients lazily, bound calls and close audio streams. No database audio blobs or credentials in frontend/source/logs.
 
+Confirm the configured child-sounding voice supports Polly neural synthesis in the chosen region. Never derive filenames from submitted text; do not return provider payloads on failure. Serve media locally for development, with a documented target-device serving setup in Phase 11. Keep files long enough for playback; add a small cleanup command when needed, not a worker system. Optional caching by text/voice/engine hash is lower priority than reliable playback and bounded disk usage.
+
 Frontend owns sentence construction, explicit Speak, playback and event submission. Generate one utterance ID for the intended phrase; record `spoken` only when playback completes. Cancellation/failure records no spoken success. Surface network/write errors without blind legacy retries; retain keyboard control and the current sentence.
 
 Optional configured Google Home casting belongs in an isolated helper: when enabled, use LAN-reachable URLs and bounded dispatch, preserve the normal audio response, and avoid duplicate browser/speaker playback via an explicit output-mode choice. An unconfigured speaker never blocks the browser demo. If casting is not ready, leave it disabled; do not advertise support or log completion based only on dispatch.
@@ -151,6 +215,10 @@ Implement single effective intent/activity, multi-topic assignments and unknown 
 **Existing operations:** both prediction routes; no contract expansion.
 
 **Build:** fast Claude Haiku prediction via Bedrock using minimal ordinary time/activity/history context, validated JSON and the same six-phrase rules. Verify model/region/account access before relying on it. Prepare deterministic fallback first; enforce the two-second AI wait deadline with bounded concurrency and retries, not just network timeouts.
+
+Use Bedrock Runtime Converse directly, with a configured model/inference profile and a small output-token limit. Treat all submitted text as data, not instructions. Reject wrong shapes/counts, excessive lengths, blanks and case-insensitive duplicates; never make a second repair call or log raw prompts/responses.
+
+Prepare fallback before waiting. Use a monotonic deadline, disable SDK retries for the latency-sensitive call and set short connect/read timeouts as secondary safeguards. If using futures, use a shared bounded executor with bounded outstanding submissions; a request-scoped executor context manager can wait on exit and defeat the deadline. Timing out a future does not stop its in-flight network call. Return fallback immediately when capacity is exhausted.
 
 **Done when:** real Bedrock can improve ordinary suggestions, while unavailable access, malformed/duplicate output, timeout or saturated capacity returns deterministic suggestions with 200. Automated delayed-call tests prove the response does not wait for eventual upstream completion. New response identifies source `ai` or fallback correctly; legacy response shape stays unchanged. No conversation audio/transcripts/context is sent to Bedrock.
 
@@ -205,6 +273,40 @@ Add `ConversationSession`, `TopicSegment`, `SuggestionBatch` and explicit select
 
 Deploy the same ASGI application behind Caddy using configuration, with HTTP/WebSocket/static routing and an explicit single-database migration. Do not add device/server synchronization or network-shared SQLite. Real public/patient use requires authentication/access controls beyond this unauthenticated hackathon scope. If a server hosts ordinary features, keep Conversation Mode computation/history on UNO Q and explicitly design the identity boundary before splitting storage.
 
+## Configuration and operational safety
+
+Use environment configuration, with placeholder-only `.env.example`; the names below are settings to wire in the relevant phase, not claims of implemented configuration:
+
+- `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`.
+- SQLite/media paths, static output path and the configured fixed legacy demo patient ID.
+- `BACKEND_PUBLIC_BASE_URL` and frontend API/WebSocket base URLs.
+- `AWS_REGION`, `POLLY_VOICE_ID`, `BEDROCK_MODEL_ID`; required credentials/session values only in ignored `backend/.env`.
+- A legacy demo timezone; namespaced requests use the selected patient's validated timezone/preferences.
+- `GOOGLE_HOME_ENABLED`, `GOOGLE_HOME_HOST` only if casting is implemented.
+
+There is no `DYNAMODB_TABLE_NAME` or separate history database. Never put credentials in frontend bundles, fixtures, documentation, responses or logs. Avoid SDK wire-level debug logging and raw sentence/prompt logging. Ignore local databases, generated audio, environments and caches. Use synthetic records and manual demo reset; automated retention/backup infrastructure is deferred.
+
+A configured speaker cannot fetch `localhost` on another device: use an explicitly allowed LAN-reachable backend URL, verify binding/firewall/shared Wi-Fi, and prefer a configured device over discovery per request. Bound Cast operations and preserve browser fallback. CORS, HTTPS and submitted caregiver IDs are not authentication; this demo is trusted-local-access only.
+
+Before rehearsal, confirm the demo timezone/activity, voice/model access, output mode, playback-completion behavior and LAN URLs with the relevant owners. Legacy TOUCH/VOICE mappings matter only if those optional inputs are enabled; do not change their protocol silently. Existing API limits, error shapes and `/api/log` success are already agreed, not open proposals.
+
+## Test and rehearsal checklist
+
+Use `python manage.py test`, Django's client/TestCase, `unittest.mock`, schema validators and Channels test utilities. Mock narrow provider/device boundaries rather than reimplementing AWS. No real cloud, speaker or Arduino is required in automated tests.
+
+As each operation graduates from scaffolding, cover:
+
+- **HTTP:** real success response schema, malformed JSON, missing/unknown fields, wrong types, oversized input, wrong methods and dependency failures; retain agreed error/status behavior.
+- **Profiles/storage:** migrations/constraints, atomic links, patient isolation/deletion, timestamp normalization, stable pagination/cursors, simultaneous writes, repeatable seeds and explicit write failures.
+- **Events:** identical/changed retries, second-spoken conflicts, intentional repetition, ownership/index/text attribution, and no counting selection/feedback as completed speech.
+- **Speech/playback:** safe file names/absolute playable URLs, closed audio streams, no fabricated URL on failure, no spoken event after cancellation/failure or mere Cast dispatch.
+- **Predictions:** six unique nonempty phrases, deterministic ties/decay, timezone boundaries, sparse/unavailable history, invalid AI output, delayed upstream calls and saturated worker capacity.
+- **WebSocket/input:** two-client single broadcast, invalid/oversized messages, disconnect and no echo loops; keyboard stays usable when hardware disconnects.
+- **Labels/analysis:** revisions, review transitions, category limits, caregiver precedence, proposal exclusion, stale activation and provider failure without changing effective state.
+- **Optional Cast:** disabled, successful dispatch and unreachable speaker without losing normal speech response/browser fallback.
+
+Run separate manual smoke tests against real Polly, Bedrock and optional Google Home only for features being advertised. Record actual R4 → bridge → UNO Q → browser results and restart/failure-path rehearsal under Phase 11. A mock passing or a scaffold existing is not evidence of a working device/cloud integration.
+
 ## Parallel work and handoff rules
 
 - **Backend lane:** 1 → 2 → 3 → 4; integrate speech (5), then labels (7), bounded AI (8), optional 9–10.
@@ -213,4 +315,4 @@ Deploy the same ASGI application behind Caddy using configuration, with HTTP/Web
 - **Benchmark lane:** Codex works only in its assigned transcription benchmark directory; findings inform S1, not core database/API work.
 - Every handoff identifies changed operations, examples to run in Swagger, tests/manual checks completed, dependency/config additions and remaining scaffolds. Do not claim a feature is complete because its endpoint exists.
 
-**Next concrete task:** Phase 1, followed by Phase 2 profiles/SQLite migrations. Start hardware and frontend shell work in parallel; do not start with AI analysis or Conversation Mode.
+**Next concrete backend task:** Phase 2 profiles/SQLite migrations and setup endpoints using the shared validators. Runtime configuration and shared validation are implemented; finish the Phase 1 frontend shell and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.

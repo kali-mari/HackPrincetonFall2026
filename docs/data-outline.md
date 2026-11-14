@@ -6,7 +6,7 @@
 
 Keep the current `profile` / `aac` / `learn` design. [Label vocabulary and creation workflow](label-vocabulary.md) specifies the agreed labeling direction: fixed starter categories/values, patient-specific caregiver extensions, and AI proposals requiring caregiver approval. The sections below incorporate that refinement without redesigning the system.
 
-The agreed direction supersedes storage/hardware assumptions in the historical [backend MVP plan](backend-mvp-plan.md):
+The agreed storage/hardware direction below is implemented in the sequence defined by the consolidated [MVP implementation plan](mvp-phase-plan.md):
 
 - Preserve existing `/api/speak`, `/api/predict`, `/api/log` request shapes and `/ws/input/` messages. Specify `/api/log` success as `200 { "ok": true }`; its persistence changes to SQLite, not DynamoDB.
 - Add the namespaced profile/AAC/learning contracts described below; routes are scaffolded (JSON 501), while feature implementation is still planned.
@@ -159,7 +159,7 @@ A `LearningArtifact` is versioned application configuration/context derived from
 
 Use SQLite and Django ORM for application records on UNO Q. This replaces the original DynamoDB plan; no DynamoDB implementation exists to migrate in the current scaffold. Keep one source of truth, not dual writes. Store preferences/configuration as bounded JSON and generated speech/model files on the local filesystem.
 
-Keep deployment portable through database/media paths, allowed hosts, public backend URL, and frontend API/WebSocket URL settings. These settings and server deployment are not configured by the contract work. A later server can host the same Django ASGI application behind Caddy; choose one database host and migrate explicitly, with PostgreSQL an option only if write concurrency requires it. Start with one ASGI process while Channels uses an in-memory layer. Caddy HTTPS does not supply authentication; do not expose this unauthenticated demo to the public internet. Device-local Conversation Mode history stays on UNO Q, not in a server database migration.
+Keep deployment portable through database/media paths, allowed hosts, public backend URL, and frontend API/WebSocket URL settings. Local runtime settings now support these backend paths, allowed hosts and public URL via `backend/.env`; see [backend setup](../backend/README.md). Frontend URL settings and target/server deployment remain pending. A later server can host the same Django ASGI application behind Caddy; choose one database host and migrate explicitly, with PostgreSQL an option only if write concurrency requires it. Start with one ASGI process while Channels uses an in-memory layer. Caddy HTTPS does not supply authentication; do not expose this unauthenticated demo to the public internet. Device-local Conversation Mode history stays on UNO Q, not in a server database migration.
 
 | Record | Minimum fields and relationships |
 | --- | --- |
@@ -281,7 +281,7 @@ Communication history can reveal sensitive needs. Minimize identifying fields, a
 Before business-handler implementation, review:
 
 1. The concrete namespaced contracts in Swagger/OpenAPI with the frontend/backend team; all business routes are wired as explicit 501 scaffolds; business features remain planned.
-2. Deployment settings for the chosen SQLite-on-UNO-Q architecture; preserve the server migration boundary and do not add database synchronization.
+2. Verify the implemented environment/path settings on UNO Q during target deployment; preserve the server migration boundary and do not add database synchronization.
 3. Jev's exact SDK/service and whether any patient-derived data leaves the machine. External AI analysis requires explicit caregiver consent and minimal payloads; deleting local data cannot guarantee provider-side deletion.
 4. Implement the labeling direction in [label-vocabulary.md](label-vocabulary.md): fixed categories/starter values, caregiver extensions, separate AI proposal review, and artifact validation. Finalize UI details and acceptable fast-decision behavior.
 5. Use synthetic data, ignored databases/audio, and manual demo reset. Automated retention, prediction expiry, and backup/deletion infrastructure are deferred beyond the hackathon; define them before real patient data.
