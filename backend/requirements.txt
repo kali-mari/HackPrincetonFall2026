@@ -1,0 +1,7 @@
+Django==6.1.3
+channels==4.3.2
+daphne==4.2.3
+django-cors-headers==4.9.0
+boto3==1.44.3
+python-dotenv==1.2.4
+PyChromecast==14.1.1
