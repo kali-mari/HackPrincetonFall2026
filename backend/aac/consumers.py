@@ -8,7 +8,7 @@ from django.conf import settings
 log = logging.getLogger(__name__)
 
 GROUP = "input"
-ACTIONS = {"PREV", "NEXT", "SELECT", "DELETE", "SPEAK"}
+ACTIONS = {"PREV", "NEXT", "SELECT", "DELETE", "SPEAK", "LISTEN"}
 SOURCES = {"button", "touch", "voice"}
 
 

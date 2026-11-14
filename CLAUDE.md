@@ -17,9 +17,9 @@ Backend runs on `http://localhost:8000`.
 - `POST /api/speak` body `{ "text": string }` returns `{ "audio_url": string }`. Also casts the audio to the Google Home if one is configured.
 - `POST /api/predict` body `{ "time": ISO string, "activity": string, "recent": string[] }` returns `{ "phrases": string[] }` with exactly 6 phrases.
 - `POST /api/log` body `{ "text": string, "timestamp": ISO string }` records a spoken sentence to DynamoDB.
-- `WS /ws/input/` pushes `{ "action": "PREV" | "NEXT" | "SELECT" | "DELETE" | "SPEAK", "source": "button" | "touch" | "voice" }` to the frontend. `voice` and `touch` always carry `SELECT`. The bridge sends to the same socket; the consumer broadcasts to a single Channels group, `input`.
+- `WS /ws/input/` pushes `{ "action": "PREV" | "NEXT" | "SELECT" | "DELETE" | "SPEAK" | "LISTEN", "source": "button" | "touch" | "voice" }` to the frontend. `voice` and `touch` always carry `SELECT`. `LISTEN` toggles caregiver listen mode (speech-to-text). The bridge sends to the same socket; the consumer broadcasts to a single Channels group, `input`.
 
-Arduino to bridge: plain text lines over serial at 9600 baud, one token per line: `PREV`, `NEXT`, `SELECT`, `DELETE`, `SPEAK` (buttons), `VOICE` (vocal switch, sent as `SELECT`/`voice`), and legacy `TOUCH` (sent as `SELECT`/`touch`). Full table in `hardware/README.md`.
+Arduino to bridge: plain text lines over serial at 9600 baud, one token per line: `PREV`, `NEXT`, `SELECT`, `DELETE`, `SPEAK` (buttons), `LISTEN` (PREV + NEXT held together), `VOICE` (vocal switch, sent as `SELECT`/`voice`), and legacy `TOUCH` (sent as `SELECT`/`touch`). Full table in `hardware/README.md`.
 
 Buttons (INPUT_PULLUP, wired to GND): PREV D2, NEXT D3, WORD/SELECT D4, DEL D5, SAY/SPEAK D6. Optional sound sensor (vocal switch) A0.
 

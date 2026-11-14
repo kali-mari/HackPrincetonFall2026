@@ -26,6 +26,7 @@ MESSAGES = {
     "SELECT": {"action": "SELECT", "source": "button"},
     "DELETE": {"action": "DELETE", "source": "button"},
     "SPEAK": {"action": "SPEAK", "source": "button"},
+    "LISTEN": {"action": "LISTEN", "source": "button"},
     "VOICE": {"action": "SELECT", "source": "voice"},
     "TOUCH": {"action": "SELECT", "source": "touch"},
 }

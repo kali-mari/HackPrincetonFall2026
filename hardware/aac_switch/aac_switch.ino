@@ -2,6 +2,7 @@
 // Prints one protocol token per line at 9600 baud for hardware/bridge.py:
 //   D2 PREV -> PREV, D3 NEXT -> NEXT, D4 WORD -> SELECT, D5 DEL -> DELETE, D6 SAY -> SPEAK
 //   A0 sound sensor (optional vocal switch) -> VOICE
+//   PREV + NEXT pressed together -> LISTEN (caregiver toggles listen mode)
 // Buttons use INPUT_PULLUP: wire each between its pin and GND (pressed = LOW).
 // Wiring check lives in hardware/test/test.ino.
 
@@ -55,6 +56,10 @@ struct DebouncedButton {
     lastReading = reading;
     return triggered;
   }
+
+  bool isDown() {
+    return stableState == LOW;
+  }
 };
 
 DebouncedButton buttons[] = {
@@ -65,6 +70,23 @@ DebouncedButton buttons[] = {
   DebouncedButton(6, "SPEAK"),
 };
 const int buttonCount = sizeof(buttons) / sizeof(buttons[0]);
+
+// Listen chord: buttons[0] (PREV) and buttons[1] (NEXT) held together. Their own PREV
+// and NEXT tokens still go out first and cancel each other on the scan. LISTEN fires
+// once per chord and re-arms only after both buttons are released.
+bool chordFired = false;
+
+void checkChord() {
+  bool prevDown = buttons[0].isDown();
+  bool nextDown = buttons[1].isDown();
+
+  if (prevDown && nextDown && !chordFired) {
+    Serial.println("LISTEN");
+    chordFired = true;
+  } else if (!prevDown && !nextDown) {
+    chordFired = false;
+  }
+}
 
 bool soundActive = false;       // inside a loud stretch
 bool soundFired = false;        // VOICE already sent for this stretch
@@ -112,5 +134,6 @@ void loop() {
       Serial.println(buttons[i].token);
     }
   }
+  checkChord();
   checkSound();
 }

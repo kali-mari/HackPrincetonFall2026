@@ -156,7 +156,7 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 { "action": "NEXT", "source": "button" }
 ```
 
-- `action`: `PREV | NEXT | SELECT | DELETE | SPEAK`.
+- `action`: `PREV | NEXT | SELECT | DELETE | SPEAK | LISTEN`. `LISTEN` toggles caregiver listen mode; it is sent when PREV and NEXT are held together.
 - `source`: `button | touch | voice`. Buttons send any action; `voice` (optional sound-sensor switch) and `touch` (legacy, no current hardware) always send `SELECT`.
 - Serial input is plain text at 9600 baud, one token per line, mapped by `hardware/bridge.py`:
 
@@ -167,6 +167,7 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 | D4 WORD | `SELECT` | `{"action": "SELECT", "source": "button"}` |
 | D5 DEL | `DELETE` | `{"action": "DELETE", "source": "button"}` |
 | D6 SAY | `SPEAK` | `{"action": "SPEAK", "source": "button"}` |
+| D2 + D3 held together | `LISTEN` | `{"action": "LISTEN", "source": "button"}` |
 | A0 sound | `VOICE` | `{"action": "SELECT", "source": "voice"}` |
 | legacy | `TOUCH` | `{"action": "SELECT", "source": "touch"}` |
 

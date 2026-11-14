@@ -18,6 +18,7 @@ Buttons use `INPUT_PULLUP`: wire each one between its pin and GND (pressed = LOW
 | D5 | DEL button | `DELETE` |
 | D6 | SAY button | `SPEAK` |
 | A0 | sound sensor (optional vocal switch) | `VOICE` |
+| D2 + D3 | PREV and NEXT held together | `LISTEN` |
 | GND | button common rail | |
 
 ## Upload the sketch
@@ -39,6 +40,10 @@ At the top of the sketch:
 - `SOUND_GAP_MS`: dips shorter than this don't reset the timer, and after firing the level must stay quiet this long before the switch can fire again.
 
 Set `DEBUG = true` to print `# sound <level>` once a second while you tune the threshold (the bridge ignores those lines). Set it back to `false` before the demo. Without a sound sensor, set `SOUND_THRESHOLD` to 1024 to turn the vocal switch off, so a floating A0 pin can't fire `VOICE`.
+
+### Listen chord
+
+Holding PREV and NEXT together prints `LISTEN` once; the frontend uses it to toggle caregiver listen mode. It fires again only after both buttons are released. Each button still prints its own `PREV`/`NEXT` first, and the two cancel out on the scan.
 
 ## Run the bridge
 
@@ -75,6 +80,7 @@ Serial: 9600 baud, one uppercase token per line, newline terminated. Anything el
 | D4 WORD | `SELECT` | `{"action": "SELECT", "source": "button"}` |
 | D5 DEL | `DELETE` | `{"action": "DELETE", "source": "button"}` |
 | D6 SAY | `SPEAK` | `{"action": "SPEAK", "source": "button"}` |
+| D2 + D3 held together | `LISTEN` | `{"action": "LISTEN", "source": "button"}` |
 | A0 sound | `VOICE` | `{"action": "SELECT", "source": "voice"}` |
 | legacy, no hardware | `TOUCH` | `{"action": "SELECT", "source": "touch"}` |
 

@@ -196,7 +196,7 @@ Optional configured Google Home casting belongs in an isolated helper: when enab
 
 **Transport:** `WS /ws/input/`; no new HTTP operation.
 
-**Build in parallel with Phases 2–5:** Elegoo UNO R3 sketch for PREV/NEXT/SELECT/DELETE/SPEAK buttons on D2–D6 (see `hardware/README.md`), debounce and the 9600-baud line protocol. Serial bridge translates accepted lines to action/source messages and reconnects with bounded retries. Close Arduino Serial Monitor while the bridge owns the port.
+**Build in parallel with Phases 2–5:** Elegoo UNO R3 sketch for PREV/NEXT/SELECT/DELETE/SPEAK buttons on D2–D6, plus a PREV + NEXT chord that sends `LISTEN` (see `hardware/README.md`), debounce and the 9600-baud line protocol. Serial bridge translates accepted lines to action/source messages and reconnects with bounded retries. Close Arduino Serial Monitor while the bridge owns the port.
 
 Implement Channels group join/leave, message validation and single broadcast without echo loops. Frontend feeds WS actions into the same scanning/selection path as Space/Enter. Validate origins for browser clients while supporting the intended non-browser bridge. Preserve legacy protocol values without requiring absent touch hardware or optional sound hardware.
 
@@ -268,7 +268,7 @@ Build versioned application configuration from effective approved labels, never 
 
 ### S1: local Conversation Mode
 
-Wait for Codex's actual UNO Q transcription findings; select local engine/settings based on measured memory, sustained throughput, accuracy and application responsiveness. Implement caregiver activation, listening indicator, keyboard/button stop, local microphone capture, bounded in-memory transcript, local topic/reply processing and normal-prediction fallback. Pause/handle board-audio echo. Stop/patient switch releases capture and rejects late results. No raw audio/transcripts/context in cloud calls or persistent logs/storage. Agree the separate session-scoped contract before implementation; never reuse the input broadcast group.
+Wait for Codex's actual UNO Q transcription findings; select local engine/settings based on measured memory, sustained throughput, accuracy and application responsiveness. Implement caregiver activation (the PREV + NEXT chord sends `LISTEN` on `/ws/input/` to toggle listening), listening indicator, keyboard/button stop, local microphone capture, bounded in-memory transcript, local topic/reply processing and normal-prediction fallback. Pause/handle board-audio echo. Stop/patient switch releases capture and rejects late results. No raw audio/transcripts/context in cloud calls or persistent logs/storage. Agree the separate session-scoped contract before implementation; never reuse the input broadcast group.
 
 **Gate:** target device sustains the whole local pipeline, not merely file transcription. Raw buffers clear on stop; no autonomous selection/speech. If performance fails, leave this mode disabled rather than silently offloading transcription.
 

@@ -40,7 +40,7 @@ class InputRelayTests(IsolatedAsyncioTestCase):
     async def test_every_action_reaches_the_board_once(self):
         bridge, board = await self.bridge_and_board()
         validator = Draft202012Validator(SCHEMAS['InputMessage'])
-        for action in ('PREV', 'NEXT', 'SELECT', 'DELETE', 'SPEAK'):
+        for action in ('PREV', 'NEXT', 'SELECT', 'DELETE', 'SPEAK', 'LISTEN'):
             message = {'action': action, 'source': 'button'}
             await bridge.send_json_to(message)
             received = await board.receive_json_from()

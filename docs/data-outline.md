@@ -263,7 +263,7 @@ Persist only the categorical topic reference, timing, and detector metadata—no
 
 Device-local records must be excluded from server migration, cloud synchronization, hosted AI context, and public Caddy routes. If ordinary Django moves to a server, keep the conversation component and its storage on the UNO Q; resolve that split explicitly rather than uploading local conversation tables with a whole-database migration. Foreign-key relationships above describe the default single-device deployment; a future split requires explicit identity/link handling.
 
-These are documentation proposals, not migrations or new endpoints. A future contract must cover start/stop, patient/session isolation, bounded context duration/size, partial/final transcript handling, stale-result rejection, local history access, and cleanup. Choose a separate session-scoped transport if streaming is needed; **do not repurpose `/ws/input/` or broadcast transcripts to its shared `input` group**. Existing request/response shapes remain unchanged.
+These are documentation proposals, not migrations or new endpoints. A future contract must cover start/stop, patient/session isolation, bounded context duration/size, partial/final transcript handling, stale-result rejection, local history access, and cleanup. Choose a separate session-scoped transport if streaming is needed; **do not repurpose `/ws/input/` or broadcast transcripts to its shared `input` group**. Only the `LISTEN` start/stop toggle (PREV + NEXT chord) travels on `/ws/input/`. Existing request/response shapes remain unchanged.
 
 Acceptance before enabling the stretch feature:
 

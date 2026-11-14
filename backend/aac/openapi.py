@@ -432,11 +432,11 @@ SCHEMAS = {
     ),
     "InputMessage": obj(
         {
-            "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK"),
+            "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK", "LISTEN"),
             "source": enum("button", "touch", "voice"),
         },
         ("action", "source"),
-        description="Switch input from hardware/bridge.py. Buttons send PREV/NEXT/SELECT/DELETE/SPEAK with source button; the vocal switch and legacy touch always send SELECT. Keyboard is handled locally in the frontend, not added to this protocol.",
+        description="Switch input from hardware/bridge.py. Buttons send PREV/NEXT/SELECT/DELETE/SPEAK with source button, and LISTEN (PREV + NEXT held together) toggles caregiver listen mode; the vocal switch and legacy touch always send SELECT. Keyboard is handled locally in the frontend, not added to this protocol.",
     ),
 }
 
@@ -1101,7 +1101,7 @@ def build_openapi():
                 "group": "input",
                 "message": ref("InputMessage"),
                 "example": {"action": "SPEAK", "source": "button"},
-                "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
+                "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, LISTEN, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
             },
         }
     )
