@@ -1,0 +1,145 @@
+/* Caregiver dashboard: the calm slate + teal world from DESIGN.md, smaller text than the board. */
+.page {
+  min-height: 100vh;
+  padding: var(--space-4) var(--space-2);
+  background: var(--cg-bg);
+  color: var(--cg-text);
+  font-size: 16px;
+  user-select: text;
+}
+
+.page h1,
+.page h2,
+.page h3,
+.page p,
+.page ol,
+.page ul {
+  margin: 0;
+}
+
+.page h1 {
+  font-size: var(--font-size-heading);
+  line-height: var(--line-height-tight);
+}
+
+.page h2 {
+  margin-bottom: var(--space-2);
+  font-size: var(--font-size-body);
+}
+
+.header,
+.columns {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.muted {
+  color: var(--cg-text-muted);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--caregiver-target);
+  padding: 0 var(--space-2);
+  border-radius: var(--cg-radius);
+  background: var(--cg-accent);
+  color: var(--cg-on-accent);
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+}
+
+.back:focus-visible {
+  outline: 3px solid var(--scan-color);
+  outline-offset: 3px;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.side {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.card {
+  padding: var(--space-3);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface);
+}
+
+.timeline,
+.counts,
+.phrases {
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: var(--space-2);
+  padding: var(--space-1) 0 var(--space-1) var(--space-2);
+  border-left: 2px solid var(--cg-accent);
+}
+
+.timeline time,
+.count {
+  color: var(--cg-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.counts li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--cg-bg);
+}
+
+.count {
+  font-weight: var(--font-weight-bold);
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.compare h3 {
+  font-size: 16px;
+}
+
+.activity {
+  margin-bottom: var(--space-1);
+  color: var(--cg-accent);
+  font-weight: var(--font-weight-bold);
+  text-transform: capitalize;
+}
+
+.phrases li {
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--cg-bg);
+}
+
+@media (max-width: 760px) {
+  .columns,
+  .compare {
+    grid-template-columns: 1fr;
+  }
+}

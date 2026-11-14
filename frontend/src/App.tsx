@@ -419,6 +419,9 @@ export default function App() {
         <button className={styles.close} onClick={() => settingsDialog.current?.close()}>
           Done
         </button>
+        <button className={styles.secondary} onClick={() => (location.hash = '#/caregiver')}>
+          Caregiver dashboard
+        </button>
       </dialog>
     </div>
   )
