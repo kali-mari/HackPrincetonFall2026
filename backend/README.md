@@ -2,7 +2,7 @@
 
 Django project: `config`. Application: `aac` (augmentative and alternative communication).
 
-Only Django scaffolding and empty feature modules are present. API routes, WebSockets, AWS integrations, CORS, environment loading, and casting are not implemented or configured yet. See [the MVP plan](../docs/backend-mvp-plan.md).
+Django scaffolding, HTTP routes, OpenAPI contracts and offline Swagger UI are present. Business routes return JSON 501 pending feature implementation; models/migrations, WebSockets, AWS integrations, CORS, environment loading, and casting are not implemented yet. See [API contracts](../docs/api-contracts.md) and the current [data outline](../docs/data-outline.md); the older MVP plan has superseded storage/hardware assumptions.
 
 ## Local setup
 
@@ -19,29 +19,44 @@ python manage.py migrate
 python manage.py runserver 8000
 ```
 
-The server runs on `http://localhost:8000`. There are no API endpoints yet; `/` returning 404 is expected. The generated Django admin route is retained, but no application authentication has been added.
+The server runs on `http://localhost:8000`:
+
+- `/api/docs`: offline Swagger UI (no CDN); scaffold operations are clearly marked and Try it out is enabled.
+- `/api/openapi.json`: OpenAPI 3.1 source for frontend tooling.
+- `/api/profile/*`, `/api/aac/*`, `/api/learn/*`, and legacy HTTP routes: wired scaffolds return JSON 501, with 400 for malformed JSON transport and 405 for wrong methods. No feature side effects or field-level validation yet.
+- `/`: 404 expected.
+
+The generated admin route is retained; no application authentication has been added. Export and validate contracts:
 
 ```sh
+python manage.py export_openapi > /tmp/aac-openapi.json
+pip install -r requirements-dev.txt
 python manage.py test
 ```
 
-The test package is empty for now. Settings are development-only, including the placeholder Django secret key. `.env` loading will be added with configuration work; never put AWS credentials in source files.
+Tests validate the schema/examples, documentation routes and all 22 HTTP business scaffolds; no AWS, device, or database is required. Settings remain development-only, including the placeholder Django secret key. `.env` loading/server deployment will be added later; never put AWS credentials in source files. SQLite on UNO Q is the chosen future application store, not DynamoDB.
 
 ## Layout
 
 ```text
 config/                     Django settings, root URLs, ASGI and WSGI entrypoints
 aac/
-  views.py                  Future HTTP handlers
+  documentation.py          Working schema and Swagger views
+  openapi.py                Contract source; business routes marked scaffolded
+  static/aac/               Offline Swagger assets and initializer
+  templates/aac/            Swagger HTML
+  urls.py                   Namespaced HTTP route wiring
+  views.py                  CSRF-exempt function views returning JSON 501
+  http.py                   Method/JSON transport checks; no feature validation
   consumers.py              Future WebSocket relay
   routing.py                Future WebSocket routes
   speech.py                 Future Polly integration
   predictions.py            Future ranking and Bedrock integration
-  history.py                Future DynamoDB history
+  history.py                Future SQLite history/ranking helpers
   casting.py                Future optional Google Home integration
   management/commands/      Future seed/cleanup commands
   migrations/               Standard Django app migrations
-  tests/                    Future feature tests
+  tests/                    Contract/documentation tests; future feature tests
 seed/                       Future demo persona data
 media/audio/                Ignored generated audio
 ```

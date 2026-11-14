@@ -1,5 +1,7 @@
 # Backend MVP plan
 
+> Historical implementation plan. Later decisions in [data-outline.md](data-outline.md), [label-vocabulary.md](label-vocabulary.md), and [api-contracts.md](api-contracts.md) supersede conflicting details below: SQLite on UNO Q replaces DynamoDB; R4 WiFi buttons/keyboard replace touch hardware; profiles and label contracts are included; Conversation Mode remains local-only stretch scope. Documentation routes are functional; business HTTP routes are wired as JSON 501 scaffolds, not implemented features. Do not add DynamoDB/dual writes based on this older plan.
+
 ## Goal and constraints
 
 Deliver one complete demo loop:

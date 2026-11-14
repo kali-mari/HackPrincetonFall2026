@@ -15,8 +15,13 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
+
+from aac.documentation import openapi_document, swagger_ui
 
 urlpatterns = [
+    path('api/docs', swagger_ui, name='swagger-ui'),
+    path('api/openapi.json', openapi_document, name='openapi-document'),
+    path('api/', include(('aac.urls', 'aac'), namespace='aac')),
     path('admin/', admin.site.urls),
 ]
