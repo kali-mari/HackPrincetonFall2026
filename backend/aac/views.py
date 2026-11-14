@@ -15,6 +15,7 @@ from .history import (
     Conflict, event_cursor, event_json, read_event_cursor, same_event, time_bucket, validate_event,
 )
 from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Profile
+from .llm import suggest_phrases
 from .predictions import predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
@@ -169,6 +170,9 @@ def predict(request):
         except DatabaseError:
             events = []  # Unavailable history still yields six defaults.
         phrases, source = predict_phrases(events, activity, bucket, now)
+        suggested = suggest_phrases(activity, bucket, payload['recent'], phrases)
+        if suggested:
+            phrases, source = suggested, 'ai'
         # Attribution needs a saved record, so a failed save is not a success.
         record = PredictionRecord.objects.create(
             patient=patient, activity=activity, time_bucket=bucket, phrases=phrases, source=source,
@@ -325,7 +329,8 @@ def legacy_predict(request):
     if response is not None:
         return response
     try:
-        now, activity = validate_prediction_request(read_json_object(request), {'time', 'activity', 'recent'})
+        payload = read_json_object(request)
+        now, activity = validate_prediction_request(payload, {'time', 'activity', 'recent'})
     except InvalidRequest as error:
         return error_response('invalid_request', str(error), 400)
     # The legacy contract has no error for missing setup or storage: fall back to defaults.
@@ -335,7 +340,7 @@ def legacy_predict(request):
     except (Profile.DoesNotExist, DatabaseError):
         events, bucket = [], None
     phrases, _ = predict_phrases(events, activity, bucket, now)
-    return JsonResponse({'phrases': phrases})
+    return JsonResponse({'phrases': suggest_phrases(activity, bucket, payload['recent'], phrases) or phrases})
 
 
 @csrf_exempt
