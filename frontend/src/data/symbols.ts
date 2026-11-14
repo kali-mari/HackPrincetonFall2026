@@ -131,8 +131,8 @@ export const CATEGORIES: Category[] = [
   },
 ]
 
-// Shown until the first /api/predict reply, and kept if the backend is down. Each is 22 characters or fewer.
-export const DEFAULT_PREDICTIONS = [
+// Shown only when /api/predict fails before any real reply arrives. Each is 22 characters or fewer.
+export const FALLBACK_PREDICTIONS = [
   'I want juice',
   'I need the bathroom',
   'I want to play',

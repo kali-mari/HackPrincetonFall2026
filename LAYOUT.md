@@ -32,7 +32,7 @@ x: 16    176 192                                                        1264
 | Region | Position (x, y) | Size | Notes |
 |---|---|---|---|
 | Sentence strip | 16, 0 | 568×120 | 40px words as Fitzgerald-colored chips, 2 rows; longer sentences keep the newest words in view. Spans the tab column plus grid columns 1-3. Tapping it speaks the sentence. |
-| Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then the demo clock (48×48), which opens a time picker; while a demo time is set, the clock is filled teal and every prediction uses that time. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not), then the current activity ("Lunch"). For one second after each switch message, the source name ("button", "touch", "voice") replaces the activity so the demo audience sees which input fired. |
+| Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then the demo clock (48×48), which opens a time picker; while a demo time is set, the clock is filled teal and every prediction uses that time. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not), then the current activity ("lunch"). Above that row, "Listening" shows while listen mode is on (the PREV + NEXT chord), and "Backup voice" shows when the last sentence was spoken by the browser because `/api/speak` failed. For one second after each switch message, the source name ("button", "touch", "voice") replaces the activity so the demo audience sees which input fired. |
 | Speak | 736, 0 | 256×120 | Double width; the most important action. |
 | Delete | 1008, 0 | 120×120 | Removes the last word. On an empty strip right after Clear, it brings the cleared sentence back (until a new word is added). |
 | Clear | 1144, 0 | 120×120 | Far corner, hardest to hit by accident. |
@@ -63,13 +63,14 @@ Grid column x positions: 192, 328, 464, 600, 736, 872, 1008, 1144. Row y positio
 - Exactly 6 phrases, each **22 characters or fewer** (about 4 words). The Bedrock prompt must say so, and the backend trims or drops longer ones.
 - **Tapping or selecting a phrase speaks it immediately** and logs it. The sentence strip is left as it is.
 - Fetched from `POST /api/predict` on load, every 60 seconds, and right after each spoken sentence. `recent` is the last 3 sentences spoken this session; `time` is local ISO with the UTC offset, or the demo clock's time when one is set.
-- While a fetch is in flight, or if it fails, the previous phrases stay. The row is never empty: it starts with 6 default phrases.
-- The current activity (for example "Lunch") shows in the caregiver cell, read from an optional `activity` field in the reply. It is hidden if the backend does not send one.
+- The 6 boxes are blank until the first reply, so a dead backend never hides behind made-up phrases. After that, while a fetch is in flight or if it fails, the previous phrases stay. If the very first fetch fails, a minimal fallback set fills the row and the failure is logged to the console.
+- The board sends a real `activity`, worked out from the time (or the demo clock) with a small schedule in `api.ts` that uses only the seed history names: breakfast until 10:30, play 10:30-11:30, lunch 11:30-13:00, play 13:00-19:00, bedtime from 19:00. It shows in the caregiver cell, directly above the prediction row.
+- **Never silent.** If `/api/speak` fails (for example 503 when no speech provider is configured) or its audio will not play, the browser's own voice (`speechSynthesis`) speaks the sentence, it is still logged, and the caregiver cell shows "Backup voice". With "Play on Google Home" on, a successful cast is not logged (the event lifecycle in `docs/api-contracts.md` counts only confirmed local playback).
 - Predictions only change the text inside the 6 boxes; no symbol tile ever moves.
 
 ## Switch scanning
 
-Step scanning only: **no timers anywhere**. Nothing moves unless the child presses NEXT or SELECT (or the keyboard fallback, Space and Enter).
+Step scanning only: **no timers anywhere**. Nothing moves unless the child presses a switch or a key.
 
 Scanning is always ready; there is no on/off toggle. The first NEXT shows the highlight, and any tap hides it. Logic lives in `frontend/src/scanning.ts`.
 
@@ -86,7 +87,11 @@ Scanning is always ready; there is no on/off toggle. The first NEXT shows the hi
 4. **After a choice.** Selecting an item acts on it (a tile adds its word, a prediction speaks its phrase, Speak speaks the strip, a tab switches category), then scanning returns to the group level **on the same group**, so a nearby next word takes fewer presses.
 5. **Touch** works at any time and clears the scan highlight.
    **Tab focus** follows the same order (Speak, Delete, Clear, predictions, tabs, grid rows); the sentence strip is skipped, and the caregiver cell comes last.
-6. **Switches.** The Arduino buttons, touch sensor, and vocal switch reach the board over `WS /ws/input/` and call the same NEXT and SELECT. The input settings dialog (from the gear) chooses which sources count; messages from a disabled source are ignored. While the dialog is open, Space and Enter work its own controls instead of scanning.
+6. **Switches.** The five Arduino buttons (and the optional vocal switch) reach the board over `WS /ws/input/`:
+   - **PREV** steps back: one group at group level, one item at item level (wrapping through the back-out state), and to the last group when nothing is highlighted. **NEXT** and **SELECT** work as above.
+   - **DELETE** and **SPEAK** act directly from any scan state and leave the highlight where it is.
+   - **LISTEN** (PREV and NEXT held together) toggles the "Listening" indicator. The hardware sends PREV and NEXT just before it, so the board restores the scan state from before those two presses.
+   - **Keyboard**, same actions: Space = NEXT, Enter = SELECT, ArrowLeft = PREV, Backspace = DELETE, Shift+Enter = SPEAK, L = LISTEN. The input settings dialog (from the gear) chooses which sources count; messages from a disabled source are ignored. While the dialog is open, Space and Enter work its own controls instead of scanning.
 
 The scan highlight is drawn inside each box, because the top and bottom rows touch the screen edge where an outside outline would be cut off. A white ring inside the violet keeps it visible on every fill, including the black Speak button.
 

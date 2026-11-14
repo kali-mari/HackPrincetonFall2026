@@ -29,16 +29,13 @@ export function localIso(date: Date): string {
   return `${local}${offset >= 0 ? '+' : '-'}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`
 }
 
-// School-day schedule: [start minute of the day, activity]. Names match backend/seed/demo_history.json where they overlap.
+// [start minute of the day, activity], using only the activity names in backend/seed/demo_history.json,
+// so the backend's same-activity history matches. Recess and after school count as play.
 const SCHEDULE: [number, string][] = [
   [0, 'breakfast'],
-  [8 * 60 + 30, 'class'],
-  [10 * 60 + 30, 'recess'],
-  [11 * 60, 'class'],
-  [11 * 60 + 45, 'lunch'],
-  [12 * 60 + 45, 'class'],
-  [15 * 60, 'play'],
-  [18 * 60, 'dinner'],
+  [10 * 60 + 30, 'play'],
+  [11 * 60 + 30, 'lunch'],
+  [13 * 60, 'play'],
   [19 * 60, 'bedtime'],
 ]
 

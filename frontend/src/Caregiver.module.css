@@ -121,6 +121,11 @@
   gap: var(--space-3);
 }
 
+.day + .day {
+  margin-top: var(--space-3);
+}
+
+.day h3,
 .compare h3 {
   font-size: 16px;
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { logSentence, predict, speak } from './api'
+import { activityAt, logSentence, predict, speak } from './api'
 import Tile from './components/Tile'
-import { CATEGORIES, CORE_WORDS, DEFAULT_PREDICTIONS, type Word, type WordType } from './data/symbols'
+import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
-import { useSwitchInput, type Source, type SourceSettings } from './useSwitchInput'
+import { EMPTY_STRIP, addWords, clearStrip, deleteLast as deleteFromStrip } from './sentence'
+import { useSwitchInput, type Action, type Source, type SourceSettings } from './useSwitchInput'
 import styles from './App.module.css'
 import tileStyles from './components/Tile.module.css'
 
@@ -64,9 +65,39 @@ async function playAudio(url: string) {
   await ended
 }
 
+// Backup voice when /api/speak or its audio fails, so the board never goes silent.
+function speakInBrowser(text: string) {
+  return new Promise<void>((resolve, reject) => {
+    if (!('speechSynthesis' in window)) return reject(new Error('speechSynthesis is not available'))
+    const utterance = new SpeechSynthesisUtterance(text)
+    // shortcut: some browsers never fire onend (no voices installed), so stop waiting after a generous estimate.
+    const timer = setTimeout(resolve, 2000 + text.length * 150)
+    utterance.onend = () => {
+      clearTimeout(timer)
+      resolve()
+    }
+    utterance.onerror = (e) => {
+      clearTimeout(timer)
+      reject(new Error(`speechSynthesis failed: ${e.error}`))
+    }
+    speechSynthesis.cancel()
+    speechSynthesis.speak(utterance)
+  })
+}
+
+// The hardware's LISTEN chord sends PREV and NEXT first; LISTEN within this window undoes them.
+const CHORD_MS = 1000
+
+const BLANK_PREDICTIONS = Array<string>(6).fill('')
+
+const onCaregiverPage = () => location.hash === '#/caregiver'
+
 export default function App() {
-  const [sentence, setSentence] = useState<string[]>([])
-  const [cleared, setCleared] = useState<string[]>([]) // what Clear removed, until the next word is added
+  const [strip, setStrip] = useState(EMPTY_STRIP)
+  const sentence = strip.words
+  const [backupVoice, setBackupVoice] = useState(false) // the last sentence used the browser's voice
+  // Scan states from before the latest PREV/NEXT presses, for undoing the LISTEN chord.
+  const chord = useRef<{ state: ScanState; at: number }[]>([])
   const [categoryId, setCategoryId] = useState(CATEGORIES[0].id)
   const [scale, setScale] = useState(fitScale)
   const [speaking, setSpeaking] = useState(false)
@@ -78,7 +109,8 @@ export default function App() {
   const settingsDialog = useRef<HTMLDialogElement>(null)
   const clockDialog = useRef<HTMLDialogElement>(null)
   const clockInput = useRef<HTMLInputElement>(null)
-  const [predictions, setPredictions] = useState(DEFAULT_PREDICTIONS)
+  // Blank until the first reply, so a dead backend never hides behind made-up phrases.
+  const [predictions, setPredictions] = useState(BLANK_PREDICTIONS)
   const [activity, setActivity] = useState('')
   const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
   const [recent, setRecent] = useState<string[]>([]) // last 3 sentences spoken this session
@@ -110,11 +142,7 @@ export default function App() {
 
   const category = CATEGORIES.find((c) => c.id === categoryId)!
   const text = sentence.join(' ')
-  const addWords = (words: string[]) => {
-    setCleared([])
-    setSentence((s) => [...s, ...words])
-  }
-  const addTile = (word: Word) => addWords([word.label])
+  const addTile = (word: Word) => setStrip((s) => addWords(s, [word.label]))
 
   // On load, every 60 seconds, and right away when the demo clock changes or a sentence is spoken.
   useEffect(() => {
@@ -125,15 +153,16 @@ export default function App() {
         const [hours, minutes] = demoTime.split(':').map(Number)
         time.setHours(hours, minutes, 0, 0)
       }
+      setActivity(activityAt(time))
       try {
         const result = await predict(time, recent)
         // A newer fetch has started, so this slow reply must not overwrite it.
         if (stale) return
         setPredictions(result.phrases)
-        setActivity(result.activity)
       } catch (err) {
-        // Keep the previous phrases: the row is never empty.
-        console.error(err)
+        // Keep the previous real phrases; the fallback fills the row only if none ever arrived.
+        console.error('Predictions failed; showing the previous or fallback phrases.', err)
+        if (!stale) setPredictions((p) => (p[0] ? p : FALLBACK_PREDICTIONS))
       }
     }
     refresh()
@@ -148,10 +177,20 @@ export default function App() {
   async function say(sentenceText: string, fromStrip: boolean) {
     if (!sentenceText || speaking) return
     setSpeaking(true)
+    let playedLocally = !playOnHome
     try {
-      const url = await speak(sentenceText)
-      // The backend casts to the Google Home itself; playing here too would echo.
-      if (!playOnHome) await playAudio(url)
+      try {
+        const url = await speak(sentenceText)
+        // The backend casts to the Google Home itself; playing here too would echo.
+        if (!playOnHome) await playAudio(url)
+        setBackupVoice(false)
+      } catch (err) {
+        // Speech provider down (503), timed out, or the clip failed: speak with the browser instead.
+        console.error('Speech failed; using the backup voice.', err)
+        await speakInBrowser(sentenceText)
+        setBackupVoice(true)
+        playedLocally = true
+      }
     } catch (err) {
       console.error(err)
       setError("Couldn't speak. Try again.")
@@ -160,24 +199,16 @@ export default function App() {
     } finally {
       setSpeaking(false)
     }
-    if (fromStrip) setSentence([])
+    if (fromStrip) setStrip((s) => ({ ...s, words: [] }))
     // Only confirmed local playback counts as spoken (api-contracts.md event lifecycle); a cast is unconfirmed.
     // The child was already heard, so a failed log is not worth an error banner.
-    if (!playOnHome) logSentence(sentenceText).catch(console.error)
+    if (playedLocally) logSentence(sentenceText).catch(console.error)
     setRecent((r) => [...r, sentenceText].slice(-RECENT_COUNT))
   }
   const handleSpeak = () => say(text, true)
 
-  // Delete on an empty strip right after Clear brings the sentence back, so one slip never costs a whole sentence.
-  function deleteLast() {
-    if (sentence.length) return setSentence((s) => s.slice(0, -1))
-    setSentence(cleared)
-    setCleared([])
-  }
-  const clear = () => {
-    if (sentence.length) setCleared(sentence)
-    setSentence([])
-  }
+  const deleteLast = () => setStrip(deleteFromStrip)
+  const clear = () => setStrip(clearStrip)
 
   // Row by row: 2 pinned core words, then 6 category slots. Empty slots keep their place.
   const cells: (Word | undefined)[] = []
@@ -223,34 +254,53 @@ export default function App() {
   }
   const scanned = (key: string) => marks.get(key)
 
-  const scanNext = () => setScan(next(scan, sizes))
   function scanSelect() {
     const result = select(scan, sizes)
     setScan(result.state)
     if (result.activate) groups[result.activate[0]][result.activate[1]].action()
   }
 
-  // DELETE and SPEAK act directly and leave the highlight where it is.
-  const { connected, flash } = useSwitchInput(sources, (action) => {
-    if (action === 'PREV') setScan(prev(scan, sizes))
-    else if (action === 'NEXT') scanNext()
-    else if (action === 'SELECT') scanSelect()
+  // One path for switches and keyboard. DELETE and SPEAK act directly and leave the highlight where it is.
+  // `now` is a millisecond clock from the caller, only compared within one input source.
+  function act(action: Action, now: number) {
+    if (action === 'PREV' || action === 'NEXT') {
+      chord.current = [...chord.current, { state: scan, at: now }].slice(-2)
+      setScan((action === 'PREV' ? prev : next)(scan, sizes))
+      return
+    }
+    if (action === 'LISTEN') {
+      // Undo the PREV and NEXT the chord sent just before, so the highlight stays put.
+      const [first, second] = chord.current
+      if (second && now - first.at < CHORD_MS) setScan(first.state)
+      chord.current = []
+      setListening((l) => !l)
+      return
+    }
+    chord.current = []
+    if (action === 'SELECT') scanSelect()
     else if (action === 'DELETE') deleteLast()
-    else if (action === 'SPEAK') handleSpeak()
-    else setListening((l) => !l)
-  })
+    else handleSpeak()
+  }
+
+  // The board stays mounted under the caregiver page so its state survives; it ignores input there.
+  const { connected, flash } = useSwitchInput(sources, (action, now) => onCaregiverPage() || act(action, now))
 
   // Re-bound every render so the handler always sees the current groups and state.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.code !== 'Space' && e.code !== 'Enter') return
-      // An open dialog (settings, demo clock) keeps Space and Enter for its own controls.
-      if (document.querySelector('dialog[open]')) return
+      const action: Action | undefined =
+        e.code === 'Space' ? 'NEXT'
+        : e.code === 'Enter' ? (e.shiftKey ? 'SPEAK' : 'SELECT')
+        : e.code === 'ArrowLeft' ? 'PREV'
+        : e.code === 'Backspace' ? 'DELETE'
+        : e.code === 'KeyL' ? 'LISTEN'
+        : undefined
+      // An open dialog (settings, demo clock) keeps its own keys.
+      if (!action || onCaregiverPage() || document.querySelector('dialog[open]')) return
       // Stop the browser from also clicking whichever button has focus.
       e.preventDefault()
       if (e.repeat) return
-      if (e.code === 'Space') scanNext()
-      else scanSelect()
+      act(action, e.timeStamp)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -384,6 +434,7 @@ export default function App() {
               Listening
             </p>
           )}
+          {backupVoice && <p className={styles.listening}>Backup voice</p>}
           <p className={styles.connection}>
             <span className={connected ? styles.dotOn : styles.dotOff} />
             <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>

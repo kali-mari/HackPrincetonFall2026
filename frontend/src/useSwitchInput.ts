@@ -21,7 +21,7 @@ function parse(data: unknown): { action: Action; source: Source } | null {
 }
 
 // Listens to WS /ws/input/ (the Arduino bridge) and calls onAction for each message from an enabled source.
-export function useSwitchInput(enabled: SourceSettings, onAction: (action: Action) => void) {
+export function useSwitchInput(enabled: SourceSettings, onAction: (action: Action, now: number) => void) {
   const [connected, setConnected] = useState(false)
   const [flash, setFlash] = useState<Source | null>(null)
   // Refs keep the socket open across renders while still calling the latest handler and settings.
@@ -47,7 +47,7 @@ export function useSwitchInput(enabled: SourceSettings, onAction: (action: Actio
       socket.onmessage = (event) => {
         const msg = parse(event.data)
         if (!msg || !latest.current.enabled[msg.source]) return
-        latest.current.onAction(msg.action)
+        latest.current.onAction(msg.action, event.timeStamp)
         setFlash(msg.source)
         clearTimeout(flashTimer)
         flashTimer = setTimeout(() => setFlash(null), FLASH_MS)
