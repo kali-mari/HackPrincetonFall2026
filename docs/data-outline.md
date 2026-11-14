@@ -2,14 +2,14 @@
 
 ## Status and scope
 
-**Data/API design, not implemented business behavior.** The executable contract definition is `backend/aac/openapi.py`; see [api-contracts.md](api-contracts.md) for Swagger UI, export, validation, and implementation status. This outline describes caregiver/patient profiles, local data storage, AAC prediction, and learning from labeled inputs.
+**Data/API design; mostly not yet implemented.** Only the profile records (`Profile`, `CaregiverPatient`) and their six operations are implemented. The executable contract definition is `backend/aac/openapi.py`; see [api-contracts.md](api-contracts.md) for Swagger UI, export, validation, and implementation status. This outline describes caregiver/patient profiles, local data storage, AAC prediction, and learning from labeled inputs.
 
 Keep the current `profile` / `aac` / `learn` design. [Label vocabulary and creation workflow](label-vocabulary.md) specifies the agreed labeling direction: fixed starter categories/values, patient-specific caregiver extensions, and AI proposals requiring caregiver approval. The sections below incorporate that refinement without redesigning the system.
 
 The agreed storage/hardware direction below is implemented in the sequence defined by the consolidated [MVP implementation plan](mvp-phase-plan.md):
 
 - Preserve existing `/api/speak`, `/api/predict`, `/api/log` request shapes and `/ws/input/` messages. Specify `/api/log` success as `200 { "ok": true }`; its persistence changes to SQLite, not DynamoDB.
-- Add the namespaced profile/AAC/learning contracts described below; routes are scaffolded (JSON 501), while feature implementation is still planned.
+- Add the namespaced profile/AAC/learning contracts described below. Profile routes are implemented; AAC, learning and legacy routes are scaffolded (JSON 501).
 - UNO R4 WiFi handles physical buttons. UNO Q 4GB hosts Django and the SQLite application database, with local transcription as a benchmark-dependent stretch goal. No touchscreen or touch sensor; keyboard fallback remains required.
 - Keep one Django app (`aac`) with plain function views. Namespaces describe responsibilities, not separate services or Django apps.
 - Use one relational database plus JSON fields and local files; no object database, object storage service, or dual-write synchronization for the hackathon. The same application may later run on a server behind Caddy via deployment settings; do not share a SQLite file over the network.
@@ -164,7 +164,7 @@ Keep deployment portable through database/media paths, allowed hosts, public bac
 | Record | Minimum fields and relationships |
 | --- | --- |
 | `Profile` | UUID `id`, `role`, `display_name`, patient-only timezone/language/preferences, created/updated timestamps |
-| `CaregiverPatient` | Caregiver FK, patient FK; unique pair; validate both roles |
+| `CaregiverPatient` | Caregiver FK, patient FK; unique pair; validate both roles (implemented: roles are checked in model validation on `save()`, not by SQL, so bulk writes bypass it) |
 | `CommunicationEvent` | UUID `id` (API `event_id`, client retry key), `utterance_id`, patient FK, kind, text/outcome, occurred/received timestamps, activity, local time bucket, input source, nullable prediction FK/candidate index |
 | `PredictionRecord` | UUID `id`, patient FK, context snapshot (activity/time bucket; no copied rolling transcript), six phrases, source, artifact version, created timestamp |
 | `LearningAnalysis` | UUID `id`, patient FK, requested-by caregiver FK, window/cutoff, status, provider/version, created timestamp, safe failure code |
@@ -280,7 +280,7 @@ Communication history can reveal sensitive needs. Minimize identifying fields, a
 
 Before business-handler implementation, review:
 
-1. The concrete namespaced contracts in Swagger/OpenAPI with the frontend/backend team; all business routes are wired as explicit 501 scaffolds; business features remain planned.
+1. The concrete namespaced contracts in Swagger/OpenAPI with the frontend/backend team; profile routes are implemented and the remaining business routes are explicit 501 scaffolds.
 2. Verify the implemented environment/path settings on UNO Q during target deployment; preserve the server migration boundary and do not add database synchronization.
 3. Jev's exact SDK/service and whether any patient-derived data leaves the machine. External AI analysis requires explicit caregiver consent and minimal payloads; deleting local data cannot guarantee provider-side deletion.
 4. Implement the labeling direction in [label-vocabulary.md](label-vocabulary.md): fixed categories/starter values, caregiver extensions, separate AI proposal review, and artifact validation. Finalize UI details and acceptable fast-decision behavior.

@@ -103,20 +103,18 @@ class ProfileFeatureTests(TestCase):
         self.assertEqual(Profile.objects.count(), count)
 
     def test_invalid_patient_fields_and_relationships(self):
-        cases = [
-            {'caregiver_id': 'bad'}, {'caregiver_id': str(uuid4())},
-            {'role': 'caregiver'}, {'id': str(uuid4())}, {'timezone': 'Not/AZone'},
-            {'timezone': None}, {'language': 'fr'}, {'language': True},
-            {'display_name': ' '}, {'preferences': None}, {'preferences': {}},
-        ]
         existing_patient = self.create_patient()
-        cases.append({'caregiver_id': existing_patient['id']})
+        # Unknown IDs and non-caregiver IDs are both "caregiver not found".
+        cases = [
+            ({'caregiver_id': 'bad'}, 400), ({'caregiver_id': str(uuid4())}, 404),
+            ({'caregiver_id': existing_patient['id']}, 404),
+            ({'role': 'caregiver'}, 400), ({'id': str(uuid4())}, 400), ({'timezone': 'Not/AZone'}, 400),
+            ({'timezone': None}, 400), ({'language': 'fr'}, 400), ({'language': True}, 400),
+            ({'display_name': ' '}, 400), ({'preferences': None}, 400), ({'preferences': {}}, 400),
+        ]
         before = Profile.objects.count()
-        for changes in cases:
+        for changes, status in cases:
             payload = {**deepcopy(SETUP), 'caregiver_id': str(self.caregiver.pk), **changes}
-            status = 404 if changes.get('caregiver_id') in (existing_patient['id'], str(UUID(int=0))) else 400
-            if changes.get('caregiver_id') not in (None, 'bad', existing_patient['id']):
-                status = 404
             with self.subTest(changes=changes):
                 self.error(self.client.post('/api/profile/patients', payload, content_type='application/json'), status)
         self.error(self.client.post('/api/profile/patients', {}, content_type='application/json'))
@@ -283,3 +281,9 @@ class DemoSeedTests(TestCase):
             self.seed()
         self.assertEqual(Profile.objects.count(), 1)
         self.assertEqual(CaregiverPatient.objects.count(), 0)
+
+    @override_settings(LEGACY_DEMO_PATIENT_ID=UUID('11111111-1111-4111-8111-111111111111'))
+    def test_seed_rejects_patient_id_equal_to_demo_caregiver(self):
+        with self.assertRaises(CommandError):
+            self.seed()
+        self.assertEqual(Profile.objects.count(), 0)

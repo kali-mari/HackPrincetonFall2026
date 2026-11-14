@@ -5,6 +5,7 @@ from pathlib import Path
 import runpy
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import UUID
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
@@ -37,6 +38,7 @@ class RuntimeSettingsTests(SimpleTestCase):
         self.assertEqual(values['STATIC_URL'], '/static/')
         self.assertEqual(values['ASGI_APPLICATION'], 'config.asgi.application')
         self.assertEqual(values['CORS_ALLOWED_ORIGINS'], ['http://localhost:5173'])
+        self.assertEqual(values['LEGACY_DEMO_PATIENT_ID'], UUID('22222222-2222-4222-8222-222222222222'))
         middleware = values['MIDDLEWARE']
         self.assertLess(
             middleware.index('corsheaders.middleware.CorsMiddleware'),
@@ -73,6 +75,10 @@ class RuntimeSettingsTests(SimpleTestCase):
         self.assertEqual(values['MEDIA_ROOT'], BACKEND_DIR / 'data/media')
         self.assertEqual(values['STATIC_ROOT'], BACKEND_DIR / 'data/static')
 
+    def test_configured_legacy_demo_patient_id(self):
+        values = self.read_settings({'LEGACY_DEMO_PATIENT_ID': '99999999-9999-4999-8999-999999999999'})
+        self.assertEqual(values['LEGACY_DEMO_PATIENT_ID'], UUID('99999999-9999-4999-8999-999999999999'))
+
     def test_dotenv_loads_without_overriding_process_environment(self):
         with TemporaryDirectory() as directory:
             env_file = Path(directory) / '.env'
@@ -108,6 +114,7 @@ class RuntimeSettingsTests(SimpleTestCase):
                 'http://example.com#private', 'http://example.com:invalid',
                 'http://example.com:99999', 'http://[invalid', 'http://bad host',
             )],
+            *[{'LEGACY_DEMO_PATIENT_ID': value} for value in ('', 'private-not-a-uuid')],
         ]
         for environment in cases:
             with self.subTest(setting=next(iter(environment))):

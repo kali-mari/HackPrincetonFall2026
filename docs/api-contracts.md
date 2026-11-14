@@ -7,20 +7,32 @@
 | `GET /api/docs` | Implemented: Swagger UI with locally bundled assets |
 | `GET /api/openapi.json` | Implemented: OpenAPI 3.1 document |
 | Backend runtime configuration | Implemented: `backend/.env`, configurable SQLite/media/static paths, local allowed hosts and development CORS |
-| Shared transport/value helpers | Implemented and tested; business-route field validation remains pending |
-| Profile, AAC, learning and legacy business routes | Wired as scaffolds: JSON 501; transport errors use 400/405 |
+| Shared transport/value helpers | Implemented and tested; used by the profile routes |
+| Profile routes (6 operations) | Implemented: SQLite persistence, field/query/cursor validation, role scoping, 503 on storage failure |
+| AAC, learning and legacy business routes (16 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Message contract documented; consumer not implemented |
 | Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
 
-The **contract/documentation layer and HTTP route scaffolds** are implemented, not profile CRUD, persistence, prediction, audio synthesis or AI integration. Every business operation has `[SCAFFOLD]` in its Swagger summary and `x-implementation-status: scaffolded` in the schema. Swagger's Try it out is enabled to inspect real scaffold responses. Success examples describe target behavior; they are never returned as fake successes.
+The **contract/documentation layer, HTTP route scaffolds and profile operations** are implemented; prediction, event history, audio synthesis and AI integration are not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
-Current behavior of all 22 business operations:
+### Profile operations (implemented)
+
+- `POST /api/profile/caregivers`, `POST /api/profile/patients` (creates the patient and its caregiver link atomically), `GET /api/profile/caregivers/{id}/patients`, and `GET`/`PATCH`/`DELETE /api/profile/patients/{id}`.
+- Request and normal success shapes match the original contract. Unknown/missing fields, blank or oversized strings, invalid IANA timezones, `language` other than `en`, and invalid `preferences` return 400. `PATCH` replaces `preferences` as a whole object. Role, ID and caregiver link are not editable.
+- A caregiver ID used as a patient ID (or the reverse) is 404, like an unknown ID.
+- Patient lists use ascending UUID order with a signed opaque cursor bound to the caregiver; a tampered, repeated or other-caregiver cursor is 400. The last page returns `next_cursor: null` (no empty terminal page).
+- **Additive 503:** all six profile operations may return `503 { "error": { "code": "unavailable", "message": "Profile storage is unavailable." } }` when SQLite is unavailable (for example, an unmigrated or unwritable database). Writes roll back; database details are never included.
+- Demo setup: `python manage.py seed_demo` idempotently creates the caregiver `11111111-1111-4111-8111-111111111111` and the patient set by `LEGACY_DEMO_PATIENT_ID` (default `22222222-2222-4222-8222-222222222222`), linked. Reruns keep edits. It fails without writing if either ID is already used by the wrong role or the two IDs are equal. An invalid `LEGACY_DEMO_PATIENT_ID` fails Django startup. Legacy routes will use this fixed patient once implemented.
+
+### Scaffold operations
+
+Current behavior of the 16 remaining business operations:
 
 - Expected methods with an acceptable transport return `501 { "error": { "code": "not_implemented", "message": "<operationId> is scaffolded; feature implementation is pending." } }`, with `Cache-Control: no-store`.
 - POST/PATCH require `Content-Type: application/json` and a UTF-8 JSON object no larger than 64 KiB; invalid bodies (including non-finite numbers) return JSON 400. Field/query/schema/relationship validation on business routes is **not implemented**; even `{}` reaches 501. Reusable value validators and parsed-body access now exist for upcoming feature handlers; scaffolds do not apply them.
 - Unsupported methods return JSON 405 with `Allow`. Non-CORS OPTIONS returns empty 204 with `Allow`; HEAD follows GET without a response body. Browser CORS preflight is handled separately by middleware (200), allowing only `http://localhost:5173` for `/api/` routes without credentials. This does not implement business behavior or authentication.
 - UUID path converters reject invalid UUID strings with Django's ordinary 404. Valid UUIDs reach the scaffold without checking record existence. Unknown paths/trailing slashes also return ordinary 404, not the future resource-error contract.
-- No database, AWS/provider calls, audio generation, or device side effects. API views are CSRF-exempt as required by the local demo conventions.
+- No database, AWS/provider calls, audio generation, or device side effects from scaffolds. API views are CSRF-exempt as required by the local demo conventions.
 
 ## Run and inspect
 
@@ -30,6 +42,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 # First setup only; leave an existing .env intact.
 cp .env.example .env
+python manage.py migrate
+python manage.py seed_demo
 python manage.py runserver 8000
 ```
 
@@ -94,7 +108,7 @@ Activation requires the expected active version (null initially) and current voc
 
 SQLite on UNO Q replaces the original DynamoDB history plan. Use Django ORM/migrations, JSON fields for small flexible payloads, and local filesystem storage for generated audio/model files. No object database or second storage service is needed. Automated retention and backup infrastructure are out of hackathon scope; use synthetic fixtures, gitignored local data and manual reset.
 
-UNO R4 WiFi handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Local runtime settings now load from `backend/.env`; see [backend setup](../backend/README.md) for path, host and public-URL configuration. Target/server deployment, application migrations and a Caddyfile remain unimplemented. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
+UNO R4 WiFi handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Local runtime settings now load from `backend/.env`; see [backend setup](../backend/README.md) for path, host and public-URL configuration. Profile migrations exist (`aac/migrations/0001_initial.py`); target/server deployment and a Caddyfile remain unimplemented. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
 
 Conversation Mode remains a separate local-only stretch feature. Raw audio/transcripts stay in memory. Approved scope permits device-local saved suggestion batches and categorical topic segments, not transcript persistence. Do not migrate those tables to a remote server or expose them through public proxy routes. See [data-outline.md](data-outline.md) for the timeline design and unresolved split-deployment boundary.
 
@@ -124,7 +138,7 @@ python manage.py check
 python manage.py test
 ```
 
-Runtime tests cover dotenv precedence, paths, invalid configuration, allowed hosts and restricted CORS/preflight. Shared-helper tests cover required/unknown fields, strict strings/UUIDs/integers, offset timestamps/UTC overflow, IANA timezones, bounded query limits, transport size boundaries and safe error envelopes via a test-only view. They do not claim business-route field validation is implemented. Contract tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise all 22 business operations with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. They do not substitute for future feature/persistence tests. Test validators are development dependencies only.
+Runtime tests cover dotenv precedence, paths, invalid configuration, allowed hosts and restricted CORS/preflight. Shared-helper tests cover required/unknown fields, strict strings/UUIDs/integers, offset timestamps/UTC overflow, IANA timezones, bounded query limits, transport size boundaries and safe error envelopes via a test-only view. Contract tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise the 16 remaining scaffolds with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. Profile tests use the migrated test database and validate responses against the OpenAPI schemas, plus validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`; runtime tests cover valid and invalid `LEGACY_DEMO_PATIENT_ID`. Test validators are development dependencies only.
 
 Swagger UI 5.31.0 assets are vendored with Apache-2.0 LICENSE/NOTICE; see [`vendor/README.md`](../backend/aac/static/aac/vendor/swagger-ui/README.md). The UI uses no CDN and disables the online validator/query overrides. On a server with `DEBUG=False`, collect static files and have Caddy serve the collected static directory; this deployment configuration remains future work.
 
@@ -132,7 +146,7 @@ Swagger UI 5.31.0 assets are vendored with Apache-2.0 LICENSE/NOTICE; see [`vend
 
 Use [mvp-phase-plan.md](mvp-phase-plan.md) for the detailed sequence, dependencies, core/optional priorities, endpoint ownership, parallel workstreams and acceptance checks. Summary:
 
-1. Profiles, SQLite models/migrations, and validation shared by plain function views.
+1. ~~Profiles, SQLite models/migrations, and validation shared by plain function views.~~ Backend done; frontend use pending.
 2. Idempotent event recording and deterministic time-decayed predictions with contract tests.
 3. Speech generation/playback integration and existing input relay.
 4. Caregiver label creation/assignment/review.

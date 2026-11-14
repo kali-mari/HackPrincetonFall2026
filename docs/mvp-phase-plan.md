@@ -15,7 +15,7 @@ Caregiver sets up a patient
 
 UNO R4 WiFi handles buttons; UNO Q 4GB hosts Django and SQLite. Keyboard fallback is always Space = NEXT, Enter = SELECT. No touchscreen or touch sensor is required.
 
-**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Business features and endpoint-specific validation, models/migrations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
+**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Phase 2's backend is implemented: the six profile operations, `Profile`/`CaregiverPatient` models and migration, and `seed_demo`. The other 16 business operations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
 
 References:
 
@@ -92,7 +92,7 @@ These are modules, not new services or mandatory abstractions. Create files only
 | --- | --- | --- | --- |
 | 0 | Contracts, Swagger, HTTP scaffolds | — | Complete |
 | 1 | Runtime configuration, validation, frontend shell | 0 | Core |
-| 2 | Profiles and patient setup | 1 | Core |
+| 2 | Profiles and patient setup | 1 | Core; backend done, frontend pending |
 | 3 | SQLite event history and retry safety | 2 | Core |
 | 4 | Deterministic predictions | 3 | Core |
 | 5 | Speech and first keyboard-driven demo loop | 2–4 | Core |
@@ -133,6 +133,8 @@ These are modules, not new services or mandatory abstractions. Create files only
 **Done when:** a clean setup boots backend and frontend, Swagger still works offline, development cross-origin requests work, malformed requests return safe JSON, and keyboard scanning can operate a small local symbol board without working business endpoints.
 
 ## Phase 2 — Profiles and patient setup
+
+**Status:** backend implemented and tested; see [api-contracts.md](api-contracts.md#profile-operations-implemented). Setup survives a restart (manual smoke test on a temporary database). Not yet done end to end: no frontend patient selection, preference loading or patient switching. The "changing active patient clears the sentence…" criterion belongs to that frontend work.
 
 **Operations (6):**
 
@@ -315,4 +317,4 @@ Run separate manual smoke tests against real Polly, Bedrock and optional Google 
 - **Benchmark lane:** Codex works only in its assigned transcription benchmark directory; findings inform S1, not core database/API work.
 - Every handoff identifies changed operations, examples to run in Swagger, tests/manual checks completed, dependency/config additions and remaining scaffolds. Do not claim a feature is complete because its endpoint exists.
 
-**Next concrete backend task:** Phase 2 profiles/SQLite migrations and setup endpoints using the shared validators. Runtime configuration and shared validation are implemented; finish the Phase 1 frontend shell and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.
+**Next concrete backend task:** Phase 3 communication event history and retry safety, including the minimal `PredictionRecord` attribution storage. Profile backend is implemented; finish the Phase 1 frontend shell, Phase 2 frontend patient setup, and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.
