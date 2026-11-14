@@ -4,7 +4,7 @@ Django project: `config`. Application: `aac` (augmentative and alternative commu
 
 **Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution, Phase 4 deterministic predictions: `POST /api/aac/predict` and legacy `POST /api/predict`, and Phase 5 speech: `POST /api/aac/speak` and legacy `POST /api/speak` through a provider-neutral text-to-speech module (ElevenLabs first), with audio caching, a `cleanup_audio` command and optional Google Home casting.
 
-**Still scaffolded:** the 9 learning operations return JSON 501. Channels/WebSocket relay and Bedrock are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
+**Still scaffolded:** the 9 learning operations return JSON 501. Bedrock is not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. `WS /ws/input/` is served by Channels through Daphne (`runserver` serves ASGI because `daphne` is first in `INSTALLED_APPS`), with the in-memory channel layer: run one process.
 
 Follow the consolidated [MVP implementation plan](../docs/mvp-phase-plan.md), [API contracts/status](../docs/api-contracts.md) and [data outline](../docs/data-outline.md).
 
@@ -146,7 +146,7 @@ aac/
   views.py                  CSRF-exempt function views: profiles, events, log, plus JSON 501 scaffolds
   http.py                   Reusable method/JSON transport checks and scaffolds
   validation.py             Explicit value/field/query helpers; no ORM access
-  consumers.py, routing.py  Future WebSocket relay
+  consumers.py, routing.py  WS /ws/input/ relay (validation, origin check, no echo)
   speech.py                 Provider-neutral TTS (ElevenLabs), caching and audio files
   predictions.py            Deterministic ranking and defaults (Bedrock later)
   casting.py                Optional background Google Home casting
@@ -157,4 +157,4 @@ seed/                       Synthetic demo history loaded by seed_demo
 media/audio/                Ignored generated audio
 ```
 
-Add Channels/Daphne and boto3 (Bedrock) when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 6 Channels/WebSocket relay or Phase 7 labels; the bridge and buttons are owned separately.
+Add boto3 (Bedrock) when that integration is implemented, not for empty placeholders. Next backend slice: Phase 7 labels; the bridge and buttons are in `hardware/`.

@@ -13,7 +13,7 @@
 | Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults; no cloud access |
 | Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting |
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
-| `WS /ws/input/` | Message contract documented; consumer not implemented |
+| `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
 
 The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** deterministic predictions and speech are implemented; AI integration is not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
@@ -170,6 +170,8 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 | legacy | `TOUCH` | `{"action": "SELECT", "source": "touch"}` |
 
 - The bridge drops presses while the WebSocket is down; it never replays them.
+- The consumer broadcasts each valid message once to every other client in the group, never back to its sender. Invalid JSON, unknown actions/sources, extra fields and binary frames are dropped (logged) without closing the connection.
+- Browser clients must send an `Origin` listed in `CORS_ALLOWED_ORIGINS` (default `http://localhost:5173`); others are rejected with 403. The bridge sends no `Origin` and is allowed, so the stock `AllowedHostsOriginValidator` is not used. Like the HTTP API, this is unauthenticated and for a trusted local network only.
 - Keyboard is local frontend input, not a new WebSocket source.
 - No conversation audio/transcripts on this broadcast group.
 

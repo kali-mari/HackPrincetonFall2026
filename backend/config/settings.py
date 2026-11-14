@@ -114,6 +114,8 @@ CORS_URLS_REGEX = r'^/api/'
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',  # first, so runserver serves ASGI (HTTP + WebSockets)
+    'channels',
     'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -154,7 +156,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-# Channels/Daphne and input routing are added with the WebSocket workstream.
+
+# One ASGI process; the in-memory layer does not work across processes.
+CHANNEL_LAYERS = {'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}}
 
 
 # Database

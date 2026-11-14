@@ -1097,7 +1097,7 @@ def build_openapi():
             "components": {"schemas": deepcopy(SCHEMAS)},
             "x-websocket": {
                 "path": "/ws/input/",
-                "status": "planned",
+                "status": "implemented",
                 "group": "input",
                 "message": ref("InputMessage"),
                 "example": {"action": "SPEAK", "source": "button"},
