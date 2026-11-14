@@ -60,6 +60,10 @@ The generated admin route remains; no application authentication has been added.
 | `SPEECH_MODEL_ID` | blank | Provider model; blank uses the provider default (`eleven_flash_v2_5` for ElevenLabs) |
 | `SPEECH_CACHE` | `true` | Reuse audio for identical provider/model/voice/text instead of calling the provider again |
 | `ELEVENLABS_API_KEY` | blank | Secret; `.env` only. Blank makes speech 503 |
+| `TRANSCRIBE_PROVIDER` | blank | On-device speech-to-text loader registered in `aac/transcription.py` (`moonshine`); blank turns it off |
+| `TRANSCRIBE_MODEL_DIR` | `models/moonshine-tiny-en` | Model files; absolute or relative to `backend/`. Filled by `manage.py fetch_transcription_model` |
+| `TRANSCRIBE_THREADS` | `1` | CPU threads for decoding, 1 to 4 |
+| `TRANSCRIBE_DEVICE` | `cpu` | Device passed to the model runtime; only `cpu` works on the UNO Q today |
 | `GOOGLE_HOME_HOST` | blank | Speaker IP; blank disables casting. Startup fails if set while `BACKEND_PUBLIC_BASE_URL` is localhost |
 | `LEGACY_DEMO_PATIENT_ID` | `22222222-2222-4222-8222-222222222222` | Fixed synthetic patient created by `seed_demo` and used by `/api/log` (and later legacy speak/predict); must be a UUID (startup fails otherwise) and must differ from the demo caregiver `11111111-1111-4111-8111-111111111111`. Not a "currently selected patient" setting |
 
@@ -105,6 +109,22 @@ Blank `PREDICT_PROVIDER` turns AI off. Pick a fast model ID from your provider's
 A provider is a function `(system, prompt, model) -> text` that raises on failure; register it in `PROVIDERS`. The rest is shared: the history/default phrases are computed first and sent with `activity`, time bucket and `recent` as JSON data; the call runs on a small thread pool and the view waits at most the deadline (SDK timeouts are only a 10-second safeguard, and SDK retries are off). Output must be exactly six unique, nonblank, single-line phrases of at most 100 characters, otherwise the fallback is used; there is no repair call. At most 4 calls run at once, so a slow provider can't pile up threads. Prompts, responses and keys are never logged.
 
 Prediction tests force `PREDICT_PROVIDER=''`, so a provider in your `.env` is never called by `manage.py test`.
+
+## On-device transcription
+
+`aac/transcription.py` turns one speech segment into text for caregiver listen mode, on the device, with no cloud call. `transcribe(pcm)` takes 16 kHz mono signed 16-bit PCM (at most 30 seconds) and returns text; it raises `TranscriptionUnavailable` when the provider is blank or its model or runtime is missing. Audio and transcripts stay in memory and are never logged.
+
+A provider is a loader `(model_dir, threads, device) -> decode(samples) -> text`; register it in `PROVIDERS` (and its download in `MODEL_ARCHIVES`) and set `TRANSCRIBE_PROVIDER`. The model loads on first use and stays resident; one decode runs at a time. To try a different model, add a loader. To try a GPU, set `TRANSCRIBE_DEVICE` to a runtime provider the loader's runtime supports; callers do not change.
+
+`moonshine` is Moonshine tiny (English, int8) through sherpa-onnx. On the UNO Q it measured about a third of one CPU core on one thread, which leaves the other cores for Django and the frontend. Numbers and the GPU attempts are in `hardware/benchmarks/transcription/SHERPA.md`.
+
+```sh
+# in backend/.env: TRANSCRIBE_PROVIDER=moonshine
+python manage.py fetch_transcription_model          # one-time download, about 120 MB
+python manage.py transcribe_file sample.wav         # prints the text and decode time
+```
+
+Not built yet: microphone capture, voice detection to cut segments, and the route that delivers transcripts to the frontend. Conversation Mode has no endpoint contract (see `docs/api-contracts.md`), so nothing calls `transcribe` from a view.
 
 ## Checks and tests
 
@@ -160,6 +180,7 @@ aac/
   profile_validation.py     Patient setup/preferences validation
   profiles.py               Profile JSON and signed patient-list cursors
   history.py                Event validation, time buckets, event JSON and cursors
+  transcription.py          Provider-neutral on-device speech-to-text (Moonshine via sherpa-onnx)
   views.py                  CSRF-exempt function views: profiles, events, log, plus JSON 501 scaffolds
   http.py                   Reusable method/JSON transport checks and scaffolds
   validation.py             Explicit value/field/query helpers; no ORM access

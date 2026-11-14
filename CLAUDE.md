@@ -42,6 +42,7 @@ Buttons (INPUT_PULLUP, wired to GND): PREV D2, NEXT D3, WORD/SELECT D4, DEL D5, 
 - AI-provider, AWS and speech-provider credentials (for example `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`) live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
 - AI predictions: provider-neutral `aac/llm.py`, selected by `PREDICT_PROVIDER` (`openai`, `anthropic`, `gemini` or `bedrock`; blank = off) with `PREDICT_MODEL`. Use a fast model (default for `anthropic` is Claude Haiku). Ask for JSON with exactly 6 phrases. If the call fails, returns invalid output or takes over 2 seconds, fall back to the history/default phrases.
 - Speech: provider-neutral `aac/speech.py`, selected by `SPEECH_PROVIDER` (currently ElevenLabs), with a child sounding voice set by `SPEECH_VOICE_ID`.
+- Transcription: provider-neutral `aac/transcription.py`, selected by `TRANSCRIBE_PROVIDER` (currently `moonshine`, Moonshine tiny through sherpa-onnx; blank = off). It runs on the device CPU with `TRANSCRIBE_THREADS` (default 1); `TRANSCRIBE_DEVICE` is the hook for a GPU runtime later. Audio and transcripts stay in memory.
 - UI: large touch targets (at least 120px), high contrast, an unmistakable scanning highlight.
 - Keyboard fallback always works: Space = NEXT, Enter = SELECT.
 - Debounce buttons. The vocal switch fires only on sound above the threshold lasting about half a second.

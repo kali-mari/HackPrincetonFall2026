@@ -33,3 +33,7 @@
 !gpu_newbackend/build.sh
 !gpu_trial4.py
 !GPU_NEWBACKEND.md
+!setup_sherpa.py
+!sherpa_bench.py
+!test_sherpa.py
+!SHERPA.md

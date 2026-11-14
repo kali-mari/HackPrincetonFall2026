@@ -12,3 +12,4 @@ media/*
 !media/audio/
 media/audio/*
 !media/audio/.gitkeep
+models/
