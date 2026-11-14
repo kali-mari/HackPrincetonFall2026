@@ -125,6 +125,10 @@ except ValueError:
     TRANSCRIBE_THREADS = 0
 if not 1 <= TRANSCRIBE_THREADS <= 4:
     raise ImproperlyConfigured('TRANSCRIBE_THREADS must be a whole number from 1 to 4.')
+# Listen mode records from this ALSA device with arecord (for example plughw:1,0 for
+# a USB microphone; see arecord -l), or plays file:<path> in real time instead.
+LISTEN_DEVICE = os.environ.get('LISTEN_DEVICE', 'default').strip() or 'default'
+LISTEN_VAD_MODEL = env_path('LISTEN_VAD_MODEL', 'models/silero_vad.onnx')
 
 # Optional Google Home casting: blank disables it. The speaker fetches audio from
 # BACKEND_PUBLIC_BASE_URL, so that URL must be reachable on the LAN.

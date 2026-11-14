@@ -14,7 +14,8 @@
 | Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting |
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
-| Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
+| `WS /ws/conversation/` | Implemented: caregiver listen mode. On-device mic capture, voice detection and transcription; numbered phrases to the one connection that started it (`aac/listen.py`, `aac/consumers.py`) |
+| Conversation Mode topic timeline and suggestions | Stretch design only; no contract yet |
 
 The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** deterministic predictions and speech are implemented; AI integration is not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
@@ -177,7 +178,34 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 - Keyboard is local frontend input, not a new WebSocket source.
 - No conversation audio/transcripts on this broadcast group.
 
-The schema includes `InputMessage` and an `x-websocket` extension for reference. Swagger does not test a WebSocket handshake or streaming behavior.
+## Listen mode WebSocket (`WS /ws/conversation/`)
+
+Caregiver listen mode turns nearby speech into text on the UNO Q. The microphone is attached to the board and recorded by the backend; no audio or text leaves the device, and nothing is stored or logged. The `LISTEN` input above stays the toggle: when the frontend receives it, it sends `start` or `stop` on this socket.
+
+Client to server, JSON text frames:
+
+```json
+{ "type": "start" }
+{ "type": "stop" }
+```
+
+Server to client:
+
+```json
+{ "type": "state", "listening": true }
+{ "type": "transcript", "seq": 1, "text": "Do you want juice?" }
+{ "type": "error", "message": "Another connection is already listening." }
+```
+
+- On connect the server sends `state` with `listening: false`. `start` answers with `state` `true` once the models are loaded and recording has begun (a few seconds the first time after the server starts); `stop` answers with `state` `false`. Repeating either is harmless.
+- `transcript` is one finished phrase: the text after a pause of about half a second, or every 10 seconds during continuous speech. `seq` counts from 1 for each connection. Expect the text about 1 to 4 seconds after the phrase ends on the UNO Q. There are no partial results.
+- `error` messages are safe to show: transcription not configured (`TRANSCRIBE_PROVIDER` blank), a model or `arecord`/`ffmpeg` missing, the microphone failing, another connection already listening, or an invalid message. An error during listening is followed by `state` `false`.
+- There is one microphone, so one connection listens at a time. Closing the connection stops listening. Transcripts go only to the connection that started it, never to the `input` group, and results that arrive after `stop` are dropped.
+- If the transcription model falls behind, the oldest waiting phrase is dropped (logged without content).
+- Browser origin rules are the same as `/ws/input/`. Clients that send no `Origin` header (scripts) are allowed.
+- Not covered yet: pausing capture while the board speaks, topic detection and conversation suggestions.
+
+The schema includes `InputMessage` and an `x-websocket` extension for `/ws/input/` only. Swagger does not test a WebSocket handshake or streaming behavior.
 
 ## Validate and test
 

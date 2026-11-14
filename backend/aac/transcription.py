@@ -68,17 +68,30 @@ _lock = threading.Lock()  # One decode at a time keeps CPU use bounded.
 _loaded = {}  # configuration -> decode; the model stays resident after first use.
 
 
-def transcribe(pcm):
-    """Text for one speech segment of 16 kHz mono signed 16-bit little-endian PCM."""
+def load():
+    """Load the configured model now (it otherwise loads on first use)."""
     loader = PROVIDERS.get(settings.TRANSCRIBE_PROVIDER)
     if loader is None:
         raise TranscriptionUnavailable('Transcription is not configured.')
-    if len(pcm) % 2 or len(pcm) > MAX_SECONDS * SAMPLE_RATE * 2:
-        raise ValueError(f'Audio must be whole 16-bit samples, at most {MAX_SECONDS} seconds.')
-    samples = array.array('h', pcm)
     key = (settings.TRANSCRIBE_PROVIDER, settings.TRANSCRIBE_MODEL_DIR,
            settings.TRANSCRIBE_THREADS, settings.TRANSCRIBE_DEVICE)
     with _lock:
         if key not in _loaded:
             _loaded[key] = loader(*key[1:])
-        return _loaded[key]([sample / 32768 for sample in samples]).strip()
+        return _loaded[key]
+
+
+def transcribe_samples(samples):
+    """Text for one speech segment of 16 kHz mono float samples in [-1, 1]."""
+    if len(samples) > MAX_SECONDS * SAMPLE_RATE:
+        raise ValueError(f'Audio must be at most {MAX_SECONDS} seconds.')
+    decode = load()
+    with _lock:
+        return decode(samples).strip()
+
+
+def transcribe(pcm):
+    """Text for one speech segment of 16 kHz mono signed 16-bit little-endian PCM."""
+    if len(pcm) % 2:
+        raise ValueError('Audio must be whole 16-bit samples.')
+    return transcribe_samples([sample / 32768 for sample in array.array('h', pcm)])

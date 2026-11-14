@@ -64,6 +64,8 @@ The generated admin route remains; no application authentication has been added.
 | `TRANSCRIBE_MODEL_DIR` | `models/moonshine-tiny-en` | Model files; absolute or relative to `backend/`. Filled by `manage.py fetch_transcription_model` |
 | `TRANSCRIBE_THREADS` | `1` | CPU threads for decoding, 1 to 4 |
 | `TRANSCRIBE_DEVICE` | `cpu` | Device passed to the model runtime; only `cpu` works on the UNO Q today |
+| `LISTEN_DEVICE` | `default` | ALSA device listen mode records from with `arecord` (for example `plughw:1,0` for a USB mic; see `arecord -l`), or `file:<path>` to play an audio file in real time instead |
+| `LISTEN_VAD_MODEL` | `models/silero_vad.onnx` | Silero voice detector that cuts the recording into phrases. Downloaded by `fetch_transcription_model` |
 | `GOOGLE_HOME_HOST` | blank | Speaker IP; blank disables casting. Startup fails if set while `BACKEND_PUBLIC_BASE_URL` is localhost |
 | `LEGACY_DEMO_PATIENT_ID` | `22222222-2222-4222-8222-222222222222` | Fixed synthetic patient created by `seed_demo` and used by `/api/log` (and later legacy speak/predict); must be a UUID (startup fails otherwise) and must differ from the demo caregiver `11111111-1111-4111-8111-111111111111`. Not a "currently selected patient" setting |
 
@@ -120,11 +122,17 @@ A provider is a loader `(model_dir, threads, device) -> decode(samples) -> text`
 
 ```sh
 # in backend/.env: TRANSCRIBE_PROVIDER=moonshine
-python manage.py fetch_transcription_model          # one-time download, about 120 MB
+python manage.py fetch_transcription_model          # one-time download, about 120 MB, plus the voice detector
 python manage.py transcribe_file sample.wav         # prints the text and decode time
+python manage.py listen                             # live: prints each phrase from the mic; Ctrl-C stops
+python manage.py listen --device file:sample.wav    # the same with a recording played in real time
 ```
 
-Not built yet: microphone capture, voice detection to cut segments, and the route that delivers transcripts to the frontend. Conversation Mode has no endpoint contract (see `docs/api-contracts.md`), so nothing calls `transcribe` from a view.
+### Listen mode
+
+`aac/listen.py` records from the microphone on the board (`arecord` on `LISTEN_DEVICE`), cuts the audio into phrases with the Silero voice detector in sherpa-onnx (a phrase ends after about half a second of silence, or at 10 seconds), and transcribes each phrase on a second thread. If transcription falls behind, the oldest waiting phrase is dropped. `WS /ws/conversation/` (`ConversationConsumer`) starts and stops it for one connection at a time and sends each phrase back as `{"type": "transcript", "seq": n, "text": ...}`; the contract is in `docs/api-contracts.md`. Audio and text are never written or logged; the server logs only how long after each phrase its text was ready.
+
+For a USB microphone, find its card with `arecord -l` and set `LISTEN_DEVICE=plughw:<card>,0`; `plughw` converts the mic's own rate to 16 kHz mono. Check it with `python manage.py listen` before using the frontend.
 
 ## Checks and tests
 
@@ -184,7 +192,8 @@ aac/
   views.py                  CSRF-exempt function views: profiles, events, log, plus JSON 501 scaffolds
   http.py                   Reusable method/JSON transport checks and scaffolds
   validation.py             Explicit value/field/query helpers; no ORM access
-  consumers.py, routing.py  WS /ws/input/ relay (validation, origin check, no echo)
+  listen.py                 Listen mode: mic capture, voice detection, phrase transcription
+  consumers.py, routing.py  WS /ws/input/ relay (validation, origin check, no echo) and WS /ws/conversation/ listen mode
   speech.py                 Provider-neutral TTS (ElevenLabs), caching and audio files
   predictions.py            Deterministic ranking and defaults
   llm.py                    Optional AI predictions (OpenAI, Anthropic, Gemini, Bedrock) with deadline and fallback
