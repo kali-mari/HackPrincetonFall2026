@@ -81,6 +81,11 @@
   --cg-on-accent: #ffffff;
   --cg-radius: 8px;
   --cg-dialog-width: 480px;
+  --cg-page-width: 1040px;
+  --cg-font-size: 16px; /* caregiver text, a step below the board's 18px body */
+  --cg-border-width: 1px;
+  --cg-focus-width: 3px;
+  --cg-time-width: 80px; /* "12:15 PM" column in the dashboard timeline */
 
   /* Motion: the only transition in the app */
   --motion-highlight-duration: 120ms;

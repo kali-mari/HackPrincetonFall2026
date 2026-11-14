@@ -72,6 +72,9 @@
   flex-direction: column;
   justify-content: space-between;
   padding: var(--space-1);
+  font-size: var(--cg-font-size); /* adult text: one line each for Listening / Backup voice and the dot row */
+  line-height: var(--line-height-tight);
+  white-space: nowrap;
 }
 
 .statusTools {
@@ -114,9 +117,10 @@
 /* A quiet note, not an alarm: the child was still heard. */
 .note {
   margin: 0;
+  overflow: hidden;
   color: var(--cg-text-muted);
   font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-tight);
+  text-overflow: ellipsis; /* a wider fallback font must never push the dot row out of the cell */
 }
 
 /* One click lets Chrome play sound; switch presses alone never count as one. */
@@ -128,10 +132,42 @@
   height: 100%;
   border: none;
   border-radius: 0;
+  flex-direction: column;
+  gap: var(--space-3);
   background: var(--color-page);
   color: var(--color-ink);
-  font-size: var(--font-size-heading);
+  font-size: var(--font-size-body);
+}
+
+/* Dressed like Speak, so the first thing the child sees is the board's own "go" button. */
+.startTarget {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--tile-radius);
+  background: var(--color-ink);
+  color: var(--color-page);
+  font-size: var(--font-size-strip);
   font-weight: var(--font-weight-bold);
+}
+
+.startTarget svg {
+  width: var(--space-8);
+  height: var(--space-8);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.startTarget svg path:first-child {
+  fill: currentColor;
+}
+
+.startHint {
+  color: var(--cg-text-muted);
 }
 
 .activity {
@@ -143,7 +179,7 @@
   align-items: center;
   gap: var(--space-1);
   margin: 0;
-  min-height: var(--space-4);
+  min-height: var(--space-3);
   font-weight: var(--font-weight-bold);
 }
 
@@ -176,12 +212,19 @@
 .dialog {
   width: var(--cg-dialog-width);
   padding: var(--space-4);
-  border: 1px solid var(--cg-border);
+  border: var(--cg-border-width) solid var(--cg-border);
   border-radius: var(--cg-radius);
-  background: var(--cg-surface);
+  background: var(--cg-bg);
   color: var(--cg-text);
-  font-size: var(--font-size-body);
+  font-size: var(--cg-font-size);
   line-height: var(--line-height-body);
+}
+
+/* Same calm focus ring as the dashboard, not the board's thick scan outline. */
+.dialog :focus-visible {
+  outline: var(--cg-focus-width) solid var(--scan-color);
+  outline-offset: var(--cg-focus-width);
+  box-shadow: none;
 }
 
 .dialog::backdrop {
@@ -201,9 +244,14 @@
 .source {
   display: flex;
   align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
   min-height: var(--caregiver-target);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: var(--space-2);
+  border: var(--cg-border-width) solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface);
   cursor: pointer;
 }
 
@@ -212,6 +260,8 @@
   height: var(--space-3);
   flex-shrink: 0; /* long hints wrapped and squeezed the checkbox */
   margin: 0;
+  /* Centered on the bold first line, not the whole block. */
+  margin-top: calc((var(--line-height-body) * 1em - var(--space-3)) / 2);
   accent-color: var(--cg-accent);
 }
 
@@ -226,7 +276,8 @@
 
 /* Voice switch tuning, indented under its checkbox (checkbox width + gap). */
 .voice {
-  margin: 0 0 var(--space-2) calc(var(--space-3) + var(--space-2));
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2) 0 calc(var(--space-2) + var(--space-3) + var(--space-2));
 }
 
 .voice label {
@@ -243,13 +294,21 @@
 }
 
 .voice p {
-  margin: 0;
+  margin: var(--space-1) 0 0;
+}
+
+/* A setup problem in a caregiver panel: plain ink on a quiet panel, not an alarm. */
+.dialog .problem {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+  color: var(--cg-text);
 }
 
 .meter {
   position: relative;
   height: var(--space-2);
-  border: 1px solid var(--cg-border);
+  border: var(--cg-border-width) solid var(--cg-border);
   border-radius: var(--cg-radius);
   background: var(--cg-bg);
   overflow: hidden;
@@ -265,7 +324,7 @@
 .meterThreshold {
   position: absolute;
   inset: 0 auto 0 0;
-  width: 2px;
+  width: var(--tile-border-width);
   background: var(--cg-text);
 }
 
@@ -284,7 +343,7 @@
 
 .secondary {
   margin-top: var(--space-1);
-  border: 1px solid var(--cg-border);
+  border: var(--cg-border-width) solid var(--cg-border);
   background: var(--cg-surface);
   color: var(--cg-text);
 }
@@ -293,8 +352,9 @@
   width: 100%;
   height: var(--caregiver-target);
   padding: 0 var(--space-2);
-  border: 1px solid var(--cg-border);
+  border: var(--cg-border-width) solid var(--cg-border);
   border-radius: var(--cg-radius);
+  background: var(--cg-surface);
   font: inherit;
   font-size: var(--font-size-tile);
   color: var(--cg-text);

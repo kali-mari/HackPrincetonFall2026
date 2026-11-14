@@ -28,7 +28,7 @@ export default function Caregiver() {
       .then((all) => setSpoken(all.filter((e) => e.kind === 'spoken' && new Date(e.timestamp).getTime() >= since)))
       .catch((err) => {
         console.error(err)
-        setError("Couldn't load recent sentences. Is the backend running?")
+        setError("Recent sentences didn't load. Check that the backend is running on port 8000, then reload this page.")
       })
     const now = new Date()
     Promise.all([predict(now, []), predict(at1215(), [])])
@@ -40,7 +40,7 @@ export default function Caregiver() {
       )
       .catch((err) => {
         console.error(err)
-        setPredictionError("Couldn't load predictions. Is the backend running?")
+        setPredictionError("Predictions didn't load. Check that the backend is running on port 8000, then reload this page.")
       })
   }, [])
 
@@ -72,7 +72,12 @@ export default function Caregiver() {
       <main className={styles.columns}>
         <section className={styles.card} aria-labelledby="log-title">
           <h2 id="log-title">Recent</h2>
-          {error && <p role="alert">{error}</p>}
+          {error && (
+            <p className={styles.problem} role="alert">
+              {error}
+            </p>
+          )}
+          {spoken === null && !error && <p className={styles.muted}>Loading…</p>}
           {spoken?.length === 0 && <p className={styles.muted}>Nothing spoken in the last 7 days.</p>}
           {[...days].map(([day, list]) => (
             <div key={day} className={styles.day}>
@@ -92,7 +97,7 @@ export default function Caregiver() {
         <div className={styles.side}>
           <section className={styles.card} aria-labelledby="most-title">
             <h2 id="most-title">Most said this week</h2>
-            {mostSaid.length === 0 && <p className={styles.muted}>No sentences yet.</p>}
+            {spoken?.length === 0 && <p className={styles.muted}>Phrases the child says most will show here.</p>}
             <ul className={styles.counts}>
               {mostSaid.map(([text, count]) => (
                 <li key={text}>
@@ -105,7 +110,12 @@ export default function Caregiver() {
 
           <section className={styles.card} aria-labelledby="adapt-title">
             <h2 id="adapt-title">How predictions adapt</h2>
-            {predictionError && <p role="alert">{predictionError}</p>}
+            {predictionError && (
+              <p className={styles.problem} role="alert">
+                {predictionError}
+              </p>
+            )}
+            {predictions.length === 0 && !predictionError && <p className={styles.muted}>Loading…</p>}
             <div className={styles.compare}>
               {predictions.map((p) => (
                 <div key={p.label}>

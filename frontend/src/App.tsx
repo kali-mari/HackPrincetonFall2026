@@ -323,13 +323,13 @@ export default function App() {
         : e.code === 'Backspace' ? 'DELETE'
         : e.code === 'KeyL' ? 'LISTEN'
         : undefined
-      // An open dialog (settings, demo clock) keeps its own keys.
-      if (!action || onCaregiverPage() || document.querySelector('dialog[open]')) return
-      // A key press also counts as the tap that unlocks sound, so the keyboard alone can start the board.
-      if (!started) {
+      // Any key press also counts as the tap that unlocks sound, so the keyboard alone can start the board.
+      if (!started && !onCaregiverPage()) {
         e.preventDefault()
         return setStarted(true)
       }
+      // An open dialog (settings, demo clock) keeps its own keys.
+      if (!action || onCaregiverPage() || document.querySelector('dialog[open]')) return
       // Stop the browser from also clicking whichever button has focus.
       e.preventDefault()
       if (e.repeat) return
@@ -469,7 +469,7 @@ export default function App() {
           )}
           {/* One middle line fits the 120px cell, so Listening wins over the quieter voice note. */}
           {backupVoice && !listening && <p className={styles.note}>Backup voice</p>}
-          <p className={styles.connection}>
+          <p className={styles.connection} title={connected ? 'Switches connected' : 'Switches not connected'}>
             <span className={connected ? styles.dotOn : styles.dotOff} />
             <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
             {/* A switch flash briefly replaces the activity name. */}
@@ -528,17 +528,20 @@ export default function App() {
               />
             </label>
             {voice.error ? (
-              <p role="status">
+              <p className={styles.problem} role="status">
                 {voice.error === 'denied'
-                  ? 'Microphone access is blocked. Allow it in the browser to use the voice switch.'
-                  : 'No microphone found for the voice switch.'}
+                  ? 'The browser blocked the microphone. Allow it from the icon at the left of the address bar, then turn Voice switch off and on.'
+                  : 'No microphone found. Connect one, then turn Voice switch off and on.'}
               </p>
             ) : (
               // The bar must cross the line and stay there for half a second to count.
-              <div className={styles.meter} role="meter" aria-label="Microphone level" aria-valuenow={voice.level} aria-valuemin={0} aria-valuemax={1}>
-                <span className={styles.meterLevel} style={{ width: `${voice.level * 100}%` }} />
-                <span className={styles.meterThreshold} style={{ left: `${(1 - sensitivity) * 100}%` }} />
-              </div>
+              <>
+                <div className={styles.meter} role="meter" aria-label="Microphone level" aria-valuenow={voice.level} aria-valuemin={0} aria-valuemax={1}>
+                  <span className={styles.meterLevel} style={{ width: `${voice.level * 100}%` }} />
+                  <span className={styles.meterThreshold} style={{ left: `${(1 - sensitivity) * 100}%` }} />
+                </div>
+                <p>A sound past the line for half a second selects.</p>
+              </>
             )}
           </div>
         )}
@@ -546,7 +549,7 @@ export default function App() {
           <input type="checkbox" checked={playOnHome} onChange={togglePlayOnHome} />
           <span>
             <strong>Play on Google Home</strong>
-            <span>The backend casts speech there, so this screen stays silent</span>
+            <span>Speech plays on the speaker instead of this screen</span>
           </span>
         </label>
         <button className={styles.close} onClick={() => settingsDialog.current?.close()}>
@@ -559,7 +562,14 @@ export default function App() {
 
       {!started && (
         <button className={styles.start} onClick={() => setStarted(true)}>
-          Tap to start
+          <span className={styles.startTarget}>
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <path d="M4 9h4l5-4v14l-5-4H4z" />
+              <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />
+            </svg>
+            Tap to start
+          </span>
+          <span className={styles.startHint}>Turns on the sound. Any key works too.</span>
         </button>
       )}
     </div>

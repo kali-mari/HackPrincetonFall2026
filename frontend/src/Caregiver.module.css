@@ -4,7 +4,7 @@
   padding: var(--space-4) var(--space-2);
   background: var(--cg-bg);
   color: var(--cg-text);
-  font-size: 16px;
+  font-size: var(--cg-font-size);
   user-select: text;
 }
 
@@ -29,7 +29,7 @@
 
 .header,
 .columns {
-  max-width: 1040px;
+  max-width: var(--cg-page-width);
   margin: 0 auto;
 }
 
@@ -46,6 +46,13 @@
   color: var(--cg-text-muted);
 }
 
+/* A load failure: plain ink, not red, since nothing the caregiver did went wrong. */
+.problem {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+}
+
 .back {
   display: inline-flex;
   align-items: center;
@@ -59,8 +66,8 @@
 }
 
 .back:focus-visible {
-  outline: 3px solid var(--scan-color);
-  outline-offset: 3px;
+  outline: var(--cg-focus-width) solid var(--scan-color);
+  outline-offset: var(--cg-focus-width);
 }
 
 .columns {
@@ -77,7 +84,7 @@
 
 .card {
   padding: var(--space-3);
-  border: 1px solid var(--cg-border);
+  border: var(--cg-border-width) solid var(--cg-border);
   border-radius: var(--cg-radius);
   background: var(--cg-surface);
 }
@@ -91,10 +98,10 @@
 
 .timeline li {
   display: grid;
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: var(--cg-time-width) 1fr;
   gap: var(--space-2);
   padding: var(--space-1) 0 var(--space-1) var(--space-2);
-  border-left: 2px solid var(--cg-accent);
+  border-left: var(--tile-border-width) solid var(--cg-accent);
 }
 
 .timeline time,
@@ -108,7 +115,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-1) 0;
-  border-bottom: 1px solid var(--cg-bg);
+  border-bottom: var(--cg-border-width) solid var(--cg-bg);
 }
 
 .count {
@@ -127,7 +134,7 @@
 
 .day h3,
 .compare h3 {
-  font-size: 16px;
+  font-size: var(--cg-font-size);
 }
 
 .activity {
@@ -139,7 +146,7 @@
 
 .phrases li {
   padding: var(--space-1) 0;
-  border-bottom: 1px solid var(--cg-bg);
+  border-bottom: var(--cg-border-width) solid var(--cg-bg);
 }
 
 @media (max-width: 760px) {
