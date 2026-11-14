@@ -15,7 +15,6 @@ const SENSITIVITY_KEY = 'aac-voice-sensitivity'
 const DEFAULT_SENSITIVITY = 0.7
 const SOURCES: { id: Source; label: string; hint: string }[] = [
   { id: 'button', label: 'Buttons', hint: 'The PREV, NEXT, WORD, DEL and SAY switches' },
-  { id: 'touch', label: 'Touch pad', hint: 'The touch sensor' },
   { id: 'voice', label: 'Voice switch', hint: 'The laptop microphone hears a sound held for about half a second' },
 ]
 
@@ -309,7 +308,8 @@ export default function App() {
   const { connected, flash, showFlash } = useSwitchInput(sources, (action, now) => onCaregiverPage() || act(action, now))
   // Per the contract, voice always means SELECT. Higher sensitivity is a lower level threshold.
   const voice = useVoiceSwitch(sources.voice, 1 - sensitivity, () => {
-    if (!onCaregiverPage()) act('SELECT', performance.now())
+    // While the settings dialog is open the caregiver is tuning the slider: flash for feedback, but don't select behind it.
+    if (!onCaregiverPage() && !document.querySelector('dialog[open]')) act('SELECT', performance.now())
     showFlash('voice')
   })
 
