@@ -111,6 +111,29 @@
   text-align: center;
 }
 
+/* A quiet note, not an alarm: the child was still heard. */
+.note {
+  margin: 0;
+  color: var(--cg-text-muted);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+/* One click lets Chrome play sound; switch presses alone never count as one. */
+.start {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-size: var(--font-size-heading);
+  font-weight: var(--font-weight-bold);
+}
+
 .activity {
   text-transform: capitalize;
 }

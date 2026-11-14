@@ -106,6 +106,7 @@ export default function App() {
   const [sources, setSources] = useState(loadSettings)
   const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
   const [listening, setListening] = useState(false)
+  const [started, setStarted] = useState(false) // Chrome plays no sound until someone taps the page once
   const settingsDialog = useRef<HTMLDialogElement>(null)
   const clockDialog = useRef<HTMLDialogElement>(null)
   const clockInput = useRef<HTMLInputElement>(null)
@@ -297,6 +298,11 @@ export default function App() {
         : undefined
       // An open dialog (settings, demo clock) keeps its own keys.
       if (!action || onCaregiverPage() || document.querySelector('dialog[open]')) return
+      // A key press also counts as the tap that unlocks sound, so the keyboard alone can start the board.
+      if (!started) {
+        e.preventDefault()
+        return setStarted(true)
+      }
       // Stop the browser from also clicking whichever button has focus.
       e.preventDefault()
       if (e.repeat) return
@@ -434,7 +440,8 @@ export default function App() {
               Listening
             </p>
           )}
-          {backupVoice && <p className={styles.listening}>Backup voice</p>}
+          {/* One middle line fits the 120px cell, so Listening wins over the quieter voice note. */}
+          {backupVoice && !listening && <p className={styles.note}>Backup voice</p>}
           <p className={styles.connection}>
             <span className={connected ? styles.dotOn : styles.dotOff} />
             <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
@@ -494,6 +501,12 @@ export default function App() {
           Caregiver dashboard
         </button>
       </dialog>
+
+      {!started && (
+        <button className={styles.start} onClick={() => setStarted(true)}>
+          Tap to start
+        </button>
+      )}
     </div>
   )
 }
