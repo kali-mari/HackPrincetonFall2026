@@ -6,6 +6,8 @@
 | --- | --- |
 | `GET /api/docs` | Implemented: Swagger UI with locally bundled assets |
 | `GET /api/openapi.json` | Implemented: OpenAPI 3.1 document |
+| Backend runtime configuration | Implemented: `backend/.env`, configurable SQLite/media/static paths, local allowed hosts and development CORS |
+| Shared transport/value helpers | Implemented and tested; business-route field validation remains pending |
 | Profile, AAC, learning and legacy business routes | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Message contract documented; consumer not implemented |
 | Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
@@ -15,8 +17,8 @@ The **contract/documentation layer and HTTP route scaffolds** are implemented, n
 Current behavior of all 22 business operations:
 
 - Expected methods with an acceptable transport return `501 { "error": { "code": "not_implemented", "message": "<operationId> is scaffolded; feature implementation is pending." } }`, with `Cache-Control: no-store`.
-- POST/PATCH require `Content-Type: application/json` and a UTF-8 JSON object no larger than 64 KiB; invalid bodies (including non-finite numbers) return JSON 400. Field/query/schema/relationship validation is **not implemented**; even `{}` reaches 501.
-- Unsupported methods return JSON 405 with `Allow`. OPTIONS returns empty 204 with `Allow`; HEAD follows GET without a response body. This is method discovery, not CORS configuration.
+- POST/PATCH require `Content-Type: application/json` and a UTF-8 JSON object no larger than 64 KiB; invalid bodies (including non-finite numbers) return JSON 400. Field/query/schema/relationship validation on business routes is **not implemented**; even `{}` reaches 501. Reusable value validators and parsed-body access now exist for upcoming feature handlers; scaffolds do not apply them.
+- Unsupported methods return JSON 405 with `Allow`. Non-CORS OPTIONS returns empty 204 with `Allow`; HEAD follows GET without a response body. Browser CORS preflight is handled separately by middleware (200), allowing only `http://localhost:5173` for `/api/` routes without credentials. This does not implement business behavior or authentication.
 - UUID path converters reject invalid UUID strings with Django's ordinary 404. Valid UUIDs reach the scaffold without checking record existence. Unknown paths/trailing slashes also return ordinary 404, not the future resource-error contract.
 - No database, AWS/provider calls, audio generation, or device side effects. API views are CSRF-exempt as required by the local demo conventions.
 
@@ -26,6 +28,8 @@ Current behavior of all 22 business operations:
 cd backend
 source .venv/bin/activate
 pip install -r requirements.txt
+# First setup only; leave an existing .env intact.
+cp .env.example .env
 python manage.py runserver 8000
 ```
 
@@ -90,7 +94,7 @@ Activation requires the expected active version (null initially) and current voc
 
 SQLite on UNO Q replaces the original DynamoDB history plan. Use Django ORM/migrations, JSON fields for small flexible payloads, and local filesystem storage for generated audio/model files. No object database or second storage service is needed. Automated retention and backup infrastructure are out of hackathon scope; use synthetic fixtures, gitignored local data and manual reset.
 
-UNO R4 WiFi handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Settings for that deployment, migrations and a Caddyfile are **not implemented in this task**. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
+UNO R4 WiFi handles buttons; UNO Q is the default Django/database host. Future server deployment should change environment configuration, not API paths. Local runtime settings now load from `backend/.env`; see [backend setup](../backend/README.md) for path, host and public-URL configuration. Target/server deployment, application migrations and a Caddyfile remain unimplemented. Run an ASGI server behind Caddy for HTTP/WebSockets; retain one process with the in-memory Channels layer. Do not use `runserver` as the public server or expose the unauthenticated API to the internet.
 
 Conversation Mode remains a separate local-only stretch feature. Raw audio/transcripts stay in memory. Approved scope permits device-local saved suggestion batches and categorical topic segments, not transcript persistence. Do not migrate those tables to a remote server or expose them through public proxy routes. See [data-outline.md](data-outline.md) for the timeline design and unresolved split-deployment boundary.
 
@@ -120,7 +124,7 @@ python manage.py check
 python manage.py test
 ```
 
-Tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise all 22 business operations with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. They do not substitute for future feature/persistence tests. Test validators are development dependencies only.
+Runtime tests cover dotenv precedence, paths, invalid configuration, allowed hosts and restricted CORS/preflight. Shared-helper tests cover required/unknown fields, strict strings/UUIDs/integers, offset timestamps/UTC overflow, IANA timezones, bounded query limits, transport size boundaries and safe error envelopes via a test-only view. They do not claim business-route field validation is implemented. Contract tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise all 22 business operations with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. They do not substitute for future feature/persistence tests. Test validators are development dependencies only.
 
 Swagger UI 5.31.0 assets are vendored with Apache-2.0 LICENSE/NOTICE; see [`vendor/README.md`](../backend/aac/static/aac/vendor/swagger-ui/README.md). The UI uses no CDN and disables the online validator/query overrides. On a server with `DEBUG=False`, collect static files and have Caddy serve the collected static directory; this deployment configuration remains future work.
 

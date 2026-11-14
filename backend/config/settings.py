@@ -10,27 +10,87 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Always read backend/.env, regardless of the working directory. Explicit process
+# environment wins over the file (useful on UNO Q and in future deployments).
+load_dotenv(BASE_DIR / '.env', override=False)
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-local-development-only'
+def env_bool(name, default):
+    value = os.environ.get(name, str(default)).strip().lower()
+    if value in {'true', '1', 'yes', 'on'}:
+        return True
+    if value in {'false', '0', 'no', 'off'}:
+        return False
+    raise ImproperlyConfigured(f'{name} must be a boolean.')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 
-ALLOWED_HOSTS = []
+def env_path(name, default):
+    value = os.environ.get(name, default).strip()
+    if not value:
+        raise ImproperlyConfigured(f'{name} must not be blank.')
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else BASE_DIR / path
+
+
+DEBUG = env_bool('DJANGO_DEBUG', True)
+DEVELOPMENT_SECRET_KEY = 'django-insecure-local-development-only'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY is required when DEBUG is false.')
+    SECRET_KEY = DEVELOPMENT_SECRET_KEY
+elif not DEBUG and SECRET_KEY == DEVELOPMENT_SECRET_KEY:
+    raise ImproperlyConfigured('Replace the development DJANGO_SECRET_KEY when DEBUG is false.')
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,[::1]'
+    ).split(',')
+    if host.strip()
+]
+
+BACKEND_PUBLIC_BASE_URL = os.environ.get(
+    'BACKEND_PUBLIC_BASE_URL', 'http://localhost:8000'
+).strip().rstrip('/')
+try:
+    public_url = urlsplit(BACKEND_PUBLIC_BASE_URL)
+    public_port = public_url.port  # Validate malformed/out-of-range ports as well.
+    valid_public_url = (
+        public_url.scheme in {'http', 'https'}
+        and public_url.hostname
+        and public_url.username is None
+        and public_url.password is None
+        and not public_url.query
+        and not public_url.fragment
+        and not any(char.isspace() for char in BACKEND_PUBLIC_BASE_URL)
+    )
+except ValueError:
+    valid_public_url = False
+if not valid_public_url:
+    raise ImproperlyConfigured(
+        'BACKEND_PUBLIC_BASE_URL must be an absolute HTTP(S) URL without credentials, query or fragment.'
+    )
+
+# The unauthenticated demo is local/trusted-network only. No wildcard CORS or
+# credentials; keyboard input does not require a WebSocket connection.
+CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
+CORS_URLS_REGEX = r'^/api/'
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,6 +102,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -68,6 +129,8 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = 'config.asgi.application'
+# Channels/Daphne and input routing are added with the WebSocket workstream.
 
 
 # Database
@@ -76,7 +139,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': env_path('SQLITE_PATH', 'db.sqlite3'),
     }
 }
 
@@ -115,7 +178,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = env_path('STATIC_ROOT', 'staticfiles')
+MEDIA_URL = '/media/'
+MEDIA_ROOT = env_path('MEDIA_ROOT', 'media')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
