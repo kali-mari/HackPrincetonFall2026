@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from .casting import cast_audio
 from .http import check_method, error_response, read_json_object, scaffold_response
 from .history import (
     Conflict, event_cursor, event_json, read_event_cursor, same_event, time_bucket, validate_event,
@@ -17,6 +18,7 @@ from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Prof
 from .predictions import predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
+from .speech import SpeechUnavailable, synthesize
 from .validation import (
     InvalidRequest, query_limit, validate_fields, validate_string, validate_timestamp, validate_uuid,
 )
@@ -122,9 +124,33 @@ def patient_detail(request, id):
         return error_response('unavailable', 'Profile storage is unavailable.', 503)
 
 
+def speech_response(text, voice_id):
+    try:
+        url = synthesize(text, voice_id)
+    except SpeechUnavailable as error:
+        return error_response('unavailable', str(error), 503)
+    cast_audio(url)  # Background and optional; never changes the response.
+    return JsonResponse({'audio_url': url})
+
+
 @csrf_exempt
 def speak(request):
-    return scaffold_response(request, {"POST": "speak"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        payload = read_json_object(request)
+        validate_fields(payload, allowed={'patient_id', 'text'}, required={'patient_id', 'text'})
+        patient_id = validate_uuid(payload['patient_id'], 'patient_id')
+        text = validate_string(payload['text'], 'text', max_length=500)
+        patient = Profile.objects.get(pk=patient_id, role=Profile.Role.PATIENT)
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    except Profile.DoesNotExist:
+        return error_response('not_found', 'Patient not found.', 404)
+    except DatabaseError:
+        return error_response('unavailable', 'Profile storage is unavailable.', 503)
+    return speech_response(text, patient.preferences.get('voice_id'))
 
 
 @csrf_exempt
@@ -275,7 +301,22 @@ def activate(request):
 
 @csrf_exempt
 def legacy_speak(request):
-    return scaffold_response(request, {"POST": "legacySpeak"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        payload = read_json_object(request)
+        validate_fields(payload, allowed={'text'}, required={'text'})
+        text = validate_string(payload['text'], 'text', max_length=500)
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    # Speech does not need the demo patient; use its voice only when available.
+    try:
+        patient = Profile.objects.get(pk=settings.LEGACY_DEMO_PATIENT_ID, role=Profile.Role.PATIENT)
+        voice_id = patient.preferences.get('voice_id')
+    except (Profile.DoesNotExist, DatabaseError):
+        voice_id = None
+    return speech_response(text, voice_id)
 
 
 @csrf_exempt

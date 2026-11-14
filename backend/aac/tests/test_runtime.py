@@ -75,6 +75,19 @@ class RuntimeSettingsTests(SimpleTestCase):
         self.assertEqual(values['MEDIA_ROOT'], BACKEND_DIR / 'data/media')
         self.assertEqual(values['STATIC_ROOT'], BACKEND_DIR / 'data/static')
 
+    def test_speech_and_casting_settings(self):
+        values = self.read_settings()
+        self.assertEqual((values['SPEECH_PROVIDER'], values['SPEECH_VOICE_ID'], values['SPEECH_MODEL_ID']),
+                         ('elevenlabs', '', ''))
+        self.assertTrue(values['SPEECH_CACHE'])
+        self.assertEqual((values['ELEVENLABS_API_KEY'], values['GOOGLE_HOME_HOST']), ('', ''))
+        values = self.read_settings({
+            'SPEECH_PROVIDER': ' ElevenLabs ', 'SPEECH_VOICE_ID': 'voice', 'SPEECH_CACHE': 'false',
+            'GOOGLE_HOME_HOST': '192.0.2.50', 'BACKEND_PUBLIC_BASE_URL': 'http://192.0.2.1:8000',
+        })
+        self.assertEqual((values['SPEECH_PROVIDER'], values['SPEECH_CACHE'], values['GOOGLE_HOME_HOST']),
+                         ('elevenlabs', False, '192.0.2.50'))
+
     def test_configured_legacy_demo_patient_id(self):
         values = self.read_settings({'LEGACY_DEMO_PATIENT_ID': '99999999-9999-4999-8999-999999999999'})
         self.assertEqual(values['LEGACY_DEMO_PATIENT_ID'], UUID('99999999-9999-4999-8999-999999999999'))
@@ -115,6 +128,9 @@ class RuntimeSettingsTests(SimpleTestCase):
                 'http://example.com:99999', 'http://[invalid', 'http://bad host',
             )],
             *[{'LEGACY_DEMO_PATIENT_ID': value} for value in ('', 'private-not-a-uuid')],
+            {'SPEECH_CACHE': 'private'},
+            *[{'GOOGLE_HOME_HOST': '192.0.2.50', 'BACKEND_PUBLIC_BASE_URL': url}
+              for url in ('http://localhost:8000', 'http://127.0.0.1:8000', 'http://[::1]:8000')],
         ]
         for environment in cases:
             with self.subTest(setting=next(iter(environment))):
@@ -150,7 +166,7 @@ class DevelopmentCorsTests(SimpleTestCase):
         ):
             with self.subTest(status=status):
                 response = self.client.post(
-                    '/api/speak', body, content_type=content_type,
+                    '/api/learn/analyze', body, content_type=content_type,
                     HTTP_ORIGIN='http://localhost:5173',
                 )
                 self.assertEqual(response.status_code, status)

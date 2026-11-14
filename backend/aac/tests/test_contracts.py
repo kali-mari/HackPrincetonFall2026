@@ -92,7 +92,7 @@ class ContractTests(SimpleTestCase):
                 implemented = path.startswith('/api/profile/') or path in (
                     "/api/docs", "/api/openapi.json", "/api/aac/events",
                     "/api/aac/patients/{id}/events", "/api/log",
-                    "/api/aac/predict", "/api/predict",
+                    "/api/aac/predict", "/api/predict", "/api/aac/speak", "/api/speak",
                 )
                 self.assertEqual(
                     operation["x-implementation-status"],
@@ -218,7 +218,7 @@ class DocumentationTests(SimpleTestCase):
 
     def test_scaffold_routes_are_not_fake_success_handlers(self):
         response = self.client.post(
-            "/api/aac/speak", {}, content_type="application/json"
+            "/api/learn/analyze", {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 501)
         self.assertEqual(response.json()["error"]["code"], "not_implemented")

@@ -1,7 +1,7 @@
 """OpenAPI contracts with explicit per-operation implementation status.
 
 Keep schemas explicit and export with `python manage.py export_openapi`.
-Profiles, event history and deterministic predictions are implemented; unfinished speech/learning routes remain JSON 501 scaffolds.
+Profiles, event history, predictions and speech are implemented; unfinished learning routes remain JSON 501 scaffolds.
 """
 
 from copy import deepcopy
@@ -695,7 +695,7 @@ def build_openapi():
     )
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
-    speech_description = "Text-to-speech, not microphone input. Generate Polly audio and return an absolute playable URL; cast when configured. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event."
+    speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
     prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. AI wait over two seconds, failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
     add(
         "/api/speak",
@@ -706,7 +706,8 @@ def build_openapi():
         request="LegacySpeakRequest",
         result="SpeakResponse",
         errors=(400, 405, 503),
-        description=speech_description,
+        implemented=True,
+        description=speech_description + " Uses the fixed demo patient's preferences.voice_id when that patient exists, otherwise SPEECH_VOICE_ID.",
         request_example={"text": SIX[0]},
         response_example={"audio_url": "http://localhost:8000/media/audio/demo.mp3"},
     )
@@ -748,7 +749,8 @@ def build_openapi():
         request="SpeakRequest",
         result="SpeakResponse",
         errors=(400, 404, 405, 503),
-        description=speech_description,
+        implemented=True,
+        description=speech_description + " Uses the patient's preferences.voice_id when set, otherwise SPEECH_VOICE_ID. Unknown or caregiver patient returns 404.",
         request_example={"patient_id": IDS["patient"], "text": SIX[0]},
         response_example={"audio_url": "http://localhost:8000/media/audio/demo.mp3"},
     )
@@ -1051,7 +1053,7 @@ def build_openapi():
         "Read this OpenAPI document",
         implemented=True,
         errors=(405,),
-        description="Implemented documentation endpoint; profiles, event history, /api/log and predictions are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
+        description="Implemented documentation endpoint; profiles, event history, /api/log, predictions and speech are implemented and learning routes remain scaffolded (501).",
     )
     paths["/api/openapi.json"]["get"]["responses"]["200"] = {
         "description": "OpenAPI 3.1 JSON document",
@@ -1076,7 +1078,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log and deterministic predictions (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log, deterministic predictions and speech (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining learning routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {

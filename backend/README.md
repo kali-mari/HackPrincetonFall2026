@@ -2,9 +2,9 @@
 
 Django project: `config`. Application: `aac` (augmentative and alternative communication).
 
-**Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution, and Phase 4 deterministic predictions: `POST /api/aac/predict` and legacy `POST /api/predict`.
+**Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution, Phase 4 deterministic predictions: `POST /api/aac/predict` and legacy `POST /api/predict`, and Phase 5 speech: `POST /api/aac/speak` and legacy `POST /api/speak` through a provider-neutral text-to-speech module (ElevenLabs first), with audio caching, a `cleanup_audio` command and optional Google Home casting.
 
-**Still scaffolded:** the other 11 HTTP business operations (speech, learning, legacy speak) return JSON 501. Channels/WebSocket relay, AWS integrations and casting are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
+**Still scaffolded:** the 9 learning operations return JSON 501. Channels/WebSocket relay and Bedrock are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
 
 Follow the consolidated [MVP implementation plan](../docs/mvp-phase-plan.md), [API contracts/status](../docs/api-contracts.md) and [data outline](../docs/data-outline.md).
 
@@ -37,7 +37,9 @@ The server runs on `http://localhost:8000`:
 - `POST /api/log`: unchanged legacy shape; saves a spoken event for `LEGACY_DEMO_PATIENT_ID` and returns `{"ok": true}`. No retry safety; 503 if the demo patient has not been seeded.
 - `POST /api/aac/predict`: six phrases ranked from the patient's confirmed spoken history, saved as a `PredictionRecord` whose ID the client sends back on attributed events. 404 unknown patient; 503 only if the record cannot be saved (unreadable history falls back to defaults).
 - `POST /api/predict`: same ranking for `LEGACY_DEMO_PATIENT_ID`, legacy `{"phrases": [...]}` shape, no saved record. Always 200 for a valid request; defaults if the demo patient is missing or storage fails.
-- Other `/api/aac/*`, `/api/learn/*`, and legacy speak routes: JSON 501, with 400 for malformed JSON transport and 405 for wrong methods.
+- `POST /api/aac/speak` and `POST /api/speak`: return `{"audio_url": ...}` for an MP3 under `/media/audio/`. Voice: the patient's `preferences.voice_id` (demo patient for legacy), else `SPEECH_VOICE_ID`. 503 when the provider is unconfigured or fails, or audio cannot be saved; never a fake URL. Speaking records no event. If `GOOGLE_HOME_HOST` is set, the audio is also cast in the background.
+- `/media/audio/<file>.mp3`: generated audio, served by Django in development (`DJANGO_DEBUG=true`).
+- `/api/learn/*`: JSON 501, with 400 for malformed JSON transport and 405 for wrong methods.
 - `/`: 404 expected.
 
 The generated admin route remains; no application authentication has been added. Migrations create Django's internal tables plus `Profile`, `CaregiverPatient` (0001), `PredictionRecord` and `CommunicationEvent` (0002). Each event stores a patient-local `time_bucket` (`night` 0–5, `morning` 5–11, `midday` 11–14, `afternoon` 14–17, `evening` 17–21, `night` 21–24, defined in `aac/history.py`) computed from the patient's timezone when it is saved. Role-specific setup and link roles are checked by model validation on every `save()`; SQLite check constraints back the per-row rules, but bulk ORM writes skip the cross-row caregiver/patient role check. SQLite is also the chosen application store on UNO Q; no DynamoDB or second database.
@@ -53,6 +55,12 @@ The generated admin route remains; no application authentication has been added.
 | `MEDIA_ROOT` | `media` | Future generated files; absolute or relative to `backend/` |
 | `STATIC_ROOT` | `staticfiles` | `collectstatic` output; absolute or relative to `backend/` |
 | `BACKEND_PUBLIC_BASE_URL` | `http://localhost:8000` | Absolute HTTP(S) base for future audio URLs; trailing slash removed; credentials/query/fragment rejected |
+| `SPEECH_PROVIDER` | `elevenlabs` | Text-to-speech provider name registered in `aac/speech.py` |
+| `SPEECH_VOICE_ID` | blank | Default provider voice ID (choose a child-sounding voice); blank makes speech 503 unless the patient sets `voice_id` |
+| `SPEECH_MODEL_ID` | blank | Provider model; blank uses the provider default (`eleven_flash_v2_5` for ElevenLabs) |
+| `SPEECH_CACHE` | `true` | Reuse audio for identical provider/model/voice/text instead of calling the provider again |
+| `ELEVENLABS_API_KEY` | blank | Secret; `.env` only. Blank makes speech 503 |
+| `GOOGLE_HOME_HOST` | blank | Speaker IP; blank disables casting. Startup fails if set while `BACKEND_PUBLIC_BASE_URL` is localhost |
 | `LEGACY_DEMO_PATIENT_ID` | `22222222-2222-4222-8222-222222222222` | Fixed synthetic patient created by `seed_demo` and used by `/api/log` (and later legacy speak/predict); must be a UUID (startup fails otherwise) and must differ from the demo caregiver `11111111-1111-4111-8111-111111111111`. Not a "currently selected patient" setting |
 
 Create parent directories for custom SQLite paths before `migrate`, and ensure database/media locations are writable on UNO Q. Settings do not create application records (`seed_demo` does, including 20 synthetic spoken events from `seed/demo_history.json`), synthesize audio, or implement media serving. Public/static/media server deployment remains a later integration task. Keep custom generated-file paths outside version control; default SQLite files, `data/`, media and collected static files are ignored.
@@ -69,7 +77,17 @@ This is an unauthenticated trusted-local-network demo, not a public deployment. 
 
 Future plain views should check methods first, parse JSON, call explicit field validators and catch `InvalidRequest`, returning `error_response('invalid_request', str(error), 400)`. Validators do not echo submitted values. Record existence, roles/ownership, preferences, cursor decoding and other feature-specific rules still belong to their implementation slices. These are small functions, not automatic OpenAPI validation or a new schema framework.
 
-Profile views use these helpers plus `profile_validation.py` (patient setup/preferences) and `profiles.py` (serialization and signed, caregiver-scoped keyset cursors). Event views use `history.py` (event validation, retry comparison, time buckets, serialization and patient-scoped cursors). Prediction views use `predictions.py` (request validation, ranking tiers, decay weights, tie ordering and curated defaults). The 11 remaining scaffolds still validate transport only and return 501 even for `{}` or invalid field/query values.
+Profile views use these helpers plus `profile_validation.py` (patient setup/preferences) and `profiles.py` (serialization and signed, caregiver-scoped keyset cursors). Event views use `history.py` (event validation, retry comparison, time buckets, serialization and patient-scoped cursors). Prediction views use `predictions.py` (request validation, ranking tiers, decay weights, tie ordering and curated defaults).
+
+## Speech providers, caching and casting
+
+`aac/speech.py` keeps providers separate from storage. A provider is a function `(text, voice_id, model_id) -> MP3 bytes` that raises `SpeechUnavailable` on failure; register it in `PROVIDERS` and set `SPEECH_PROVIDER`. Caching, file names, URLs, size limits and casting work the same for every provider. ElevenLabs is called with the standard library (`urllib`), a 10-second timeout and the voice ID URL-encoded.
+
+With `SPEECH_CACHE=true`, the file name is a SHA-256 hash of provider, model, voice and text (never the text itself), so a repeated phrase is served from disk without a provider call. Files are written to a temporary name and renamed, so a concurrent request never sees a partial MP3. A cache hit refreshes the file's age.
+
+`python manage.py cleanup_audio [--hours 24]` deletes MP3s (and leftover `.tmp` files) not used within the given hours. Run it manually or from cron; there is no worker.
+
+Casting (`aac/casting.py`, PyChromecast) connects straight to `GOOGLE_HOME_HOST` without network discovery, in a background thread with 5-second bounds, after the audio URL is ready. It never delays or changes the HTTP response, and failures are logged without the URL or sentence. The speaker must reach `BACKEND_PUBLIC_BASE_URL` (a LAN address in `DJANGO_ALLOWED_HOSTS`). When casting is on, configure the frontend not to also play locally, to avoid double playback. Casting has not been tested against a real speaker yet. The 11 remaining scaffolds still validate transport only and return 501 even for `{}` or invalid field/query values.
 
 ## Checks and tests
 
@@ -80,7 +98,7 @@ python manage.py test
 python manage.py export_openapi > /tmp/aac-openapi.json
 ```
 
-Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 11 remaining scaffolds, the profile feature, event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history) and predictions (defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, attribution round trip, fallbacks). Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
+Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 11 remaining scaffolds, the profile feature, event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history) predictions (defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, attribution round trip, fallbacks) and speech (mocked provider, voice selection, caching, file naming, failures, ElevenLabs request shape and errors, cleanup, casting dispatch). No test calls a real provider or speaker. Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
 
 Manual HTTP smoke checks after starting Django:
 
@@ -105,6 +123,8 @@ Profile-slice verification: `manage.py check`, all 64 tests and `makemigrations 
 
 Event-history verification: `manage.py check`, all 79 tests and `makemigrations --check` passed. Manual smoke test on a temporary database: seed, event 201 → identical retry 200 → changed retry 409, `/api/log` 200, then a restart with all 22 events still listed newest first.
 
+Speech verification: all 114 tests passed. Live server smoke test without an API key: both speak routes returned 503 `Speech is not configured.` with no file written, and `/media/audio/` served an MP3 with `audio/mpeg`. Real ElevenLabs and Google Home calls are untested until a key, voice and speaker are configured.
+
 Prediction verification: all 93 tests passed. Manual smoke test on a seeded temporary database returned activity-appropriate suggestions (breakfast, lunch, bedtime), time-of-day history for an unknown activity, and the legacy shape.
 
 ## Layout
@@ -127,14 +147,14 @@ aac/
   http.py                   Reusable method/JSON transport checks and scaffolds
   validation.py             Explicit value/field/query helpers; no ORM access
   consumers.py, routing.py  Future WebSocket relay
-  speech.py                 Future Polly integration
+  speech.py                 Provider-neutral TTS (ElevenLabs), caching and audio files
   predictions.py            Deterministic ranking and defaults (Bedrock later)
-  casting.py                Future optional Google Home integration
-  management/commands/      Schema export and seed_demo
+  casting.py                Optional background Google Home casting
+  management/commands/      Schema export, seed_demo and cleanup_audio
   migrations/               Application migrations (0001 profiles, 0002 history)
   tests/                    Runtime, contract/documentation, scaffold and profile tests
 seed/                       Synthetic demo history loaded by seed_demo
 media/audio/                Ignored generated audio
 ```
 
-Add Channels/Daphne, boto3 and optional casting dependencies when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 5 Polly speech (`/api/aac/speak`, legacy `/api/speak`).
+Add Channels/Daphne and boto3 (Bedrock) when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 6 Channels/WebSocket relay or Phase 7 labels; the bridge and buttons are owned separately.

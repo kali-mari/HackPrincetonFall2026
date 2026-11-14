@@ -32,7 +32,7 @@ This document governs implementation sequence, not API definitions. Exact reques
 
 ```text
 Frontend -- HTTP --> Django function views --> Django ORM --> SQLite on UNO Q
-                              |--> Polly --> local audio files
+                              |--> TTS provider (ElevenLabs) --> local audio files
                               |--> optional bounded Bedrock predictions/analysis
 Frontend <-- WS --> Channels input group <-- WS --> serial bridge <-- R4 WiFi
 Google Home <-- LAN audio URL + optional Cast command -- backend
@@ -57,9 +57,10 @@ Own small application functions for validation, ranking, fallback, prompts and f
 | daphne | ASGI server; first in `INSTALLED_APPS` for WebSocket-capable `runserver` |
 | django-cors-headers | Development CORS for `http://localhost:5173` |
 | python-dotenv | Load ignored `backend/.env` without a custom parser |
-| boto3 | Polly and Bedrock when those phases are implemented; no DynamoDB |
+| boto3 | Bedrock when that phase is implemented; no DynamoDB |
+| PyChromecast | Optional Google Home casting (installed; disabled unless `GOOGLE_HOME_HOST` is set) |
 
-Pin compatible versions and add dependencies only when used. Keep optional `pychromecast` isolated, for example in `requirements-cast.txt`. Development schema validators/test tooling belong in development requirements.
+Pin compatible versions and add dependencies only when used. PyChromecast is in the main requirements but stays inactive until `GOOGLE_HOME_HOST` is configured. Development schema validators/test tooling belong in development requirements.
 
 Use built-ins: `json`, `datetime`/`zoneinfo`, collections, `pathlib`, `uuid`, optional `hashlib`, `logging`, `unittest.mock`, `concurrent.futures` and `time.monotonic`. No DRF, Pydantic, LangChain, Celery, Redis, vector database, cloud-emulation stack, repository framework or autonomous agent framework.
 
@@ -74,7 +75,7 @@ backend/
     migrations/
     views.py                 # thin handlers and small transport/validation helpers
     consumers.py, routing.py # input relay only
-    speech.py                # Polly and temporary audio files
+    speech.py                # Provider-neutral TTS and temporary audio files
     predictions.py           # deterministic ranking, bounded AI and fallback
     history.py               # shared ORM event persistence/query logic, if needed
     casting.py               # optional isolated speaker integration
@@ -177,9 +178,11 @@ Integrate Phase 3 attribution checks with actual prediction responses: predictio
 
 ## Phase 5 — Speech and the first complete keyboard demo
 
+**Status:** backend implemented and tested with a mocked provider; see [api-contracts.md](api-contracts.md#speech-implemented). The team switched from Polly to a provider-neutral module, with ElevenLabs as the first provider. Caching, `cleanup_audio` and optional Google Home casting are included. Real ElevenLabs and speaker smoke tests wait on a key, voice ID and speaker. Frontend playback and event recording remain with the frontend lane.
+
 **Operations (2):** `POST /api/aac/speak`, `POST /api/speak`.
 
-**Build:** Polly neural speech in `speech.py`, temporary MP3 files with server-generated names and absolute playable URLs. Create clients lazily, bound calls and close audio streams. No database audio blobs or credentials in frontend/source/logs.
+**Build (original plan; the provider is now ElevenLabs, not Polly):** Polly neural speech in `speech.py`, temporary MP3 files with server-generated names and absolute playable URLs. Create clients lazily, bound calls and close audio streams. No database audio blobs or credentials in frontend/source/logs.
 
 Confirm the configured child-sounding voice supports Polly neural synthesis in the chosen region. Never derive filenames from submitted text; do not return provider payloads on failure. Serve media locally for development, with a documented target-device serving setup in Phase 11. Keep files long enough for playback; add a small cleanup command when needed, not a worker system. Optional caching by text/voice/engine hash is lower priority than reliable playback and bounded disk usage.
 
@@ -187,7 +190,7 @@ Frontend owns sentence construction, explicit Speak, playback and event submissi
 
 Optional configured Google Home casting belongs in an isolated helper: when enabled, use LAN-reachable URLs and bounded dispatch, preserve the normal audio response, and avoid duplicate browser/speaker playback via an explicit output-mode choice. An unconfigured speaker never blocks the browser demo. If casting is not ready, leave it disabled; do not advertise support or log completion based only on dispatch.
 
-**Done when:** the patient can use Space/Enter to compose/select, explicitly speak, hear audio, save one completed utterance and receive the next six suggestions. Invalid requests and Polly failures never return fake playable URLs. Failed/cancelled playback creates no spoken event. Speech generation failure leaves sentence/scanning usable.
+**Done when:** the patient can use Space/Enter to compose/select, explicitly speak, hear audio, save one completed utterance and receive the next six suggestions. Invalid requests and speech-provider failures never return fake playable URLs. Failed/cancelled playback creates no spoken event. Speech generation failure leaves sentence/scanning usable.
 
 ## Phase 6 — Physical switches and live input relay
 
@@ -286,9 +289,10 @@ Use environment configuration, with placeholder-only `.env.example`; the names b
 - `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`.
 - SQLite/media paths, static output path and the configured fixed legacy demo patient ID.
 - `BACKEND_PUBLIC_BASE_URL` and frontend API/WebSocket base URLs.
-- `AWS_REGION`, `POLLY_VOICE_ID`, `BEDROCK_MODEL_ID`; required credentials/session values only in ignored `backend/.env`.
+- `SPEECH_PROVIDER`, `SPEECH_VOICE_ID`, `SPEECH_MODEL_ID`, `SPEECH_CACHE`, `ELEVENLABS_API_KEY` (implemented).
+- `AWS_REGION`, `BEDROCK_MODEL_ID`; required credentials/session values only in ignored `backend/.env`.
 - A legacy demo timezone; namespaced requests use the selected patient's validated timezone/preferences.
-- `GOOGLE_HOME_ENABLED`, `GOOGLE_HOME_HOST` only if casting is implemented.
+- `GOOGLE_HOME_HOST` (implemented; blank disables casting).
 
 There is no `DYNAMODB_TABLE_NAME` or separate history database. Never put credentials in frontend bundles, fixtures, documentation, responses or logs. Avoid SDK wire-level debug logging and raw sentence/prompt logging. Ignore local databases, generated audio, environments and caches. Use synthetic records and manual demo reset; automated retention/backup infrastructure is deferred.
 
@@ -311,7 +315,7 @@ As each operation graduates from scaffolding, cover:
 - **Labels/analysis:** revisions, review transitions, category limits, caregiver precedence, proposal exclusion, stale activation and provider failure without changing effective state.
 - **Optional Cast:** disabled, successful dispatch and unreachable speaker without losing normal speech response/browser fallback.
 
-Run separate manual smoke tests against real Polly, Bedrock and optional Google Home only for features being advertised. Record actual R4 → bridge → UNO Q → browser results and restart/failure-path rehearsal under Phase 11. A mock passing or a scaffold existing is not evidence of a working device/cloud integration.
+Run separate manual smoke tests against the real speech provider, Bedrock and optional Google Home only for features being advertised. Record actual R4 → bridge → UNO Q → browser results and restart/failure-path rehearsal under Phase 11. A mock passing or a scaffold existing is not evidence of a working device/cloud integration.
 
 ## Parallel work and handoff rules
 
@@ -321,4 +325,4 @@ Run separate manual smoke tests against real Polly, Bedrock and optional Google 
 - **Benchmark lane:** Codex works only in its assigned transcription benchmark directory; findings inform S1, not core database/API work.
 - Every handoff identifies changed operations, examples to run in Swagger, tests/manual checks completed, dependency/config additions and remaining scaffolds. Do not claim a feature is complete because its endpoint exists.
 
-**Next concrete backend task:** Phase 5 Polly speech (`/api/aac/speak`, `/api/speak`); it needs AWS credentials in `backend/.env`. Profile, event-history and prediction backends are implemented; finish the Phase 1 frontend shell, Phase 2 frontend patient setup, and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.
+**Next concrete backend task:** a real ElevenLabs smoke test once the key and voice are set, then Phase 7 labels (Phase 6 bridge/buttons are owned separately; the Channels relay is still open). Profile, event-history, prediction and speech backends are implemented; finish the Phase 1 frontend shell, Phase 2 frontend patient setup, and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.

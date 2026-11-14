@@ -89,6 +89,22 @@ try:
 except ValueError:
     raise ImproperlyConfigured('LEGACY_DEMO_PATIENT_ID must be a UUID.') from None
 
+# Text-to-speech. The provider name selects a function in aac/speech.py; voice and
+# model IDs are provider-specific. Missing keys/voices make speech return 503.
+SPEECH_PROVIDER = os.environ.get('SPEECH_PROVIDER', 'elevenlabs').strip().lower()
+SPEECH_VOICE_ID = os.environ.get('SPEECH_VOICE_ID', '').strip()
+SPEECH_MODEL_ID = os.environ.get('SPEECH_MODEL_ID', '').strip()
+SPEECH_CACHE = env_bool('SPEECH_CACHE', True)
+ELEVENLABS_API_KEY = os.environ.get('ELEVENLABS_API_KEY', '').strip()
+
+# Optional Google Home casting: blank disables it. The speaker fetches audio from
+# BACKEND_PUBLIC_BASE_URL, so that URL must be reachable on the LAN.
+GOOGLE_HOME_HOST = os.environ.get('GOOGLE_HOME_HOST', '').strip()
+if GOOGLE_HOME_HOST and public_url.hostname in {'localhost', '127.0.0.1', '::1'}:
+    raise ImproperlyConfigured(
+        'GOOGLE_HOME_HOST requires a LAN-reachable BACKEND_PUBLIC_BASE_URL, not localhost.'
+    )
+
 # The unauthenticated demo is local/trusted-network only. No wildcard CORS or
 # credentials; keyboard input does not require a WebSocket connection.
 CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
