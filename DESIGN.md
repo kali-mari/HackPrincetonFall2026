@@ -15,7 +15,10 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 ## Scanning highlight
 - **Violet `#5B00D6`**: no Fitzgerald category uses it, and it contrasts 5.9:1 to 7.7:1 with every tile fill and 8.7:1 with the page, so it stands out from 3 meters.
 - **6px solid outline drawn inside the box**: it covers the thin black border, so it reads as "this one" rather than as a tile border, and it is never clipped by the screen edge.
-- **Slight scale (1.04)**: a second, non-color cue, so the highlight is visible to color-blind viewers too.
+- **Group level**: every box in the active group gets the outline plus a lavender inner ring; the tile fills keep their true Fitzgerald colors.
+- **Item level**: only the active item gets the outline and a 1.05 scale, a second, non-color cue for color-blind viewers.
+- **Back-out**: the whole group again, but with a dashed outline and no tint, so "leave this row" never looks like "choose this row".
+- **Everything else dims to 60%**: the eye goes straight to the active group from across the room.
 
 ## Typography
 - **Atkinson Hyperlegible**: designed by the Braille Institute so similar letters (I/l/1, O/0) never get mixed up.
@@ -29,5 +32,5 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 - **16px gaps**: enough to prevent mis-taps between neighbors without shrinking the grid.
 
 ## Motion
-- **One transition: the highlight moves in 120ms**: fast enough to keep up with switch scanning, slow enough to follow.
-- **Reduced motion**: under `prefers-reduced-motion`, the duration drops to 0ms and the scale to none; the outline alone carries the highlight.
+- **One motion: the scanning highlight, 120ms**: the outline, dimming, and scale all change together, fast enough to keep up with switch scanning, slow enough to follow.
+- **Reduced motion**: under `prefers-reduced-motion`, every change is instant, with no scale and no dimming; the outline alone shows what is highlighted.

@@ -131,7 +131,7 @@ export const CATEGORIES: Category[] = [
   },
 ]
 
-// shortcut: static phrases until the prediction row calls POST /api/predict. Each is 22 characters or fewer.
+// Shown until the first /api/predict reply, and kept if the backend is down. Each is 22 characters or fewer.
 export const DEFAULT_PREDICTIONS = [
   'I want juice',
   'I need the bathroom',

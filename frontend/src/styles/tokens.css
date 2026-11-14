@@ -31,7 +31,9 @@
   --scan-outline-width: 6px;
   --scan-outline-offset: -6px; /* drawn inside the box: edge rows touch the screen edge (LAYOUT.md) */
   --scan-outline: var(--scan-outline-width) solid var(--scan-color);
-  --scan-scale: 1.04;
+  --scan-scale: 1.05;
+  --scan-tint: color-mix(in srgb, var(--scan-color) 25%, var(--color-page)); /* group-level inner ring */
+  --scan-dim-opacity: 0.6; /* groups that are not active */
 
   /* Typography */
   --font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
@@ -83,5 +85,6 @@
   :root {
     --motion-highlight-duration: 0ms;
     --scan-scale: 1;
+    --scan-dim-opacity: 1; /* outline alone carries the highlight */
   }
 }

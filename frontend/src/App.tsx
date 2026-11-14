@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { logSentence, speak } from './api'
+import { logSentence, predict, speak } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, DEFAULT_PREDICTIONS, type Word } from './data/symbols'
-import { next, select, type ScanState } from './scanning'
+import { next, select, type ScanMark, type ScanState } from './scanning'
 import { useSwitchInput, type Source, type SourceSettings } from './useSwitchInput'
 import styles from './App.module.css'
 
@@ -35,6 +35,8 @@ function fitScale() {
 }
 
 const ERROR_MS = 3000
+const PREDICT_EVERY_MS = 60_000
+const RECENT_COUNT = 3
 
 // Resolves when the clip finishes, so Speak stays disabled until the room has heard it.
 async function playAudio(url: string) {
@@ -56,6 +58,12 @@ export default function App() {
   const [scan, setScan] = useState<ScanState>(null)
   const [sources, setSources] = useState(loadSettings)
   const settingsDialog = useRef<HTMLDialogElement>(null)
+  const clockDialog = useRef<HTMLDialogElement>(null)
+  const clockInput = useRef<HTMLInputElement>(null)
+  const [predictions, setPredictions] = useState(DEFAULT_PREDICTIONS)
+  const [activity, setActivity] = useState('')
+  const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
+  const [recent, setRecent] = useState<string[]>([]) // last 3 sentences spoken this session
 
   function toggleSource(id: Source) {
     const updated = { ...sources, [id]: !sources[id] }
@@ -78,11 +86,40 @@ export default function App() {
   const addWords = (words: string[]) => setSentence((s) => [...s, ...words])
   const addTile = (word: Word) => addWords([word.label])
 
-  async function handleSpeak() {
-    if (!text || speaking) return
+  // On load, every 60 seconds, and right away when the demo clock changes or a sentence is spoken.
+  useEffect(() => {
+    let stale = false
+    async function refresh() {
+      const time = new Date()
+      if (demoTime) {
+        const [hours, minutes] = demoTime.split(':').map(Number)
+        time.setHours(hours, minutes, 0, 0)
+      }
+      try {
+        const result = await predict(time, recent)
+        // A newer fetch has started, so this slow reply must not overwrite it.
+        if (stale) return
+        setPredictions(result.phrases)
+        setActivity(result.activity)
+      } catch (err) {
+        // Keep the previous phrases: the row is never empty.
+        console.error(err)
+      }
+    }
+    refresh()
+    const timer = setInterval(refresh, PREDICT_EVERY_MS)
+    return () => {
+      stale = true
+      clearInterval(timer)
+    }
+  }, [demoTime, recent])
+
+  // Speaks a sentence from the strip (then clears it) or a prediction phrase (strip untouched).
+  async function say(sentenceText: string, fromStrip: boolean) {
+    if (!sentenceText || speaking) return
     setSpeaking(true)
     try {
-      await playAudio(await speak(text))
+      await playAudio(await speak(sentenceText))
     } catch (err) {
       console.error(err)
       setError("Couldn't speak. Try again.")
@@ -91,10 +128,12 @@ export default function App() {
     } finally {
       setSpeaking(false)
     }
-    setSentence([])
+    if (fromStrip) setSentence([])
     // The child was already heard, so a failed log is not worth an error banner.
-    logSentence(text).catch(console.error)
+    logSentence(sentenceText).catch(console.error)
+    setRecent((r) => [...r, sentenceText].slice(-RECENT_COUNT))
   }
+  const handleSpeak = () => say(text, true)
 
   const deleteLast = () => setSentence((s) => s.slice(0, -1))
   const clear = () => setSentence([])
@@ -115,7 +154,7 @@ export default function App() {
       { key: 'delete', action: deleteLast },
       { key: 'clear', action: clear },
     ],
-    DEFAULT_PREDICTIONS.map((phrase, i) => ({ key: `pred-${i}`, action: () => addWords(phrase.split(' ')) })),
+    predictions.map((phrase, i) => ({ key: `pred-${i}`, action: () => say(phrase, false) })),
     CATEGORIES.map((c) => ({ key: `tab-${c.id}`, action: () => setCategoryId(c.id) })),
   ]
   for (let row = 0; row < GRID_ROWS; row++) {
@@ -128,13 +167,20 @@ export default function App() {
   }
   const sizes = groups.map((g) => g.length)
 
-  const lit = new Set<string>()
+  // Each scannable box gets one highlight state, styled in index.css.
+  const marks = new Map<string, ScanMark>()
   if (scan) {
-    const group = groups[scan.group]
-    const one = scan.item !== null && scan.item < group.length ? group[scan.item] : null
-    for (const item of one ? [one] : group) lit.add(item.key)
+    const size = groups[scan.group].length
+    const level = scan.item === null ? 'group' : scan.item === size ? 'back' : 'item'
+    groups.forEach((group, g) =>
+      group.forEach((item, i) => {
+        if (g !== scan.group) marks.set(item.key, 'dim')
+        else if (level !== 'item') marks.set(item.key, level)
+        else if (i === scan.item) marks.set(item.key, 'item')
+      }),
+    )
   }
-  const scanned = (key: string) => lit.has(key) || undefined
+  const scanned = (key: string) => marks.get(key)
 
   const scanNext = () => setScan(next(scan, sizes))
   function scanSelect() {
@@ -149,8 +195,8 @@ export default function App() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.code !== 'Space' && e.code !== 'Enter') return
-      // The settings dialog keeps Space and Enter for its own checkboxes and buttons.
-      if (settingsDialog.current?.open) return
+      // An open dialog (settings, demo clock) keeps Space and Enter for its own controls.
+      if (document.querySelector('dialog[open]')) return
       // Stop the browser from also clicking whichever button has focus.
       e.preventDefault()
       if (e.repeat) return
@@ -177,11 +223,11 @@ export default function App() {
           <span>{text}</span>
         </button>
 
-        {/* Caregiver controls: never in the scan order. /f5 adds the demo clock beside the gear. */}
+        {/* Caregiver controls: never in the scan order. */}
         <div className={styles.status}>
           <div className={styles.statusTools}>
             <button
-              className={styles.gear}
+              className={styles.tool}
               onClick={() => settingsDialog.current?.showModal()}
               aria-label="Input settings"
             >
@@ -191,11 +237,23 @@ export default function App() {
                 <circle cx="10" cy="17" r="2" />
               </svg>
             </button>
+            <button
+              className={styles.tool}
+              onClick={() => clockDialog.current?.showModal()}
+              aria-label={demoTime ? `Demo clock: ${demoTime}` : 'Demo clock: real time'}
+              aria-pressed={Boolean(demoTime)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </button>
           </div>
           <p className={styles.connection}>
             <span className={connected ? styles.dotOn : styles.dotOff} />
             <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
-            {flash && <span>{flash}</span>}
+            {/* A switch flash briefly replaces the activity name. */}
+            {flash ? <span>{flash}</span> : <span className={styles.activity}>{activity}</span>}
           </p>
         </div>
         <button
@@ -221,11 +279,12 @@ export default function App() {
         </button>
 
         <div className={styles.predictions}>
-          {DEFAULT_PREDICTIONS.map((phrase, i) => (
+          {predictions.map((phrase, i) => (
             <button
-              key={phrase}
+              key={i}
               className={styles.prediction}
-              onClick={() => addWords(phrase.split(' '))}
+              onClick={() => say(phrase, false)}
+              disabled={speaking}
               data-scan={scanned(`pred-${i}`)}
             >
               {phrase}
@@ -258,7 +317,31 @@ export default function App() {
         </div>
       </main>
 
-      <dialog ref={settingsDialog} className={styles.settings} aria-labelledby="settings-title">
+      <dialog ref={clockDialog} className={styles.dialog} aria-labelledby="clock-title">
+        <h2 id="clock-title">Demo clock</h2>
+        <p>Predictions use this time instead of the real clock.</p>
+        <input ref={clockInput} className={styles.time} type="time" defaultValue={demoTime || '12:15'} />
+        <button
+          className={styles.close}
+          onClick={() => {
+            setDemoTime(clockInput.current?.value ?? '')
+            clockDialog.current?.close()
+          }}
+        >
+          Use this time
+        </button>
+        <button
+          className={styles.secondary}
+          onClick={() => {
+            setDemoTime('')
+            clockDialog.current?.close()
+          }}
+        >
+          Use the real time
+        </button>
+      </dialog>
+
+      <dialog ref={settingsDialog} className={styles.dialog} aria-labelledby="settings-title">
         <h2 id="settings-title">Input settings</h2>
         <p>Choose which switches can move the highlight.</p>
         {SOURCES.map((s) => (

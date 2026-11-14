@@ -46,19 +46,30 @@
   gap: var(--space-1);
 }
 
-.gear {
+.tool {
   width: var(--caregiver-target);
   height: var(--caregiver-target);
   border-radius: var(--cg-radius);
 }
 
-.gear svg {
+.tool svg {
   width: var(--space-4);
   height: var(--space-4);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
   stroke-linecap: round;
+}
+
+/* The demo clock is filled while a demo time is set, so nobody forgets the board is on a fake clock. */
+.tool[aria-pressed='true'] {
+  background: var(--cg-accent);
+  color: var(--cg-on-accent);
+  border-color: var(--cg-accent);
+}
+
+.activity {
+  text-transform: capitalize;
 }
 
 .connection {
@@ -95,8 +106,8 @@
   white-space: nowrap;
 }
 
-/* Settings dialog: caregiver palette, smaller type than the child's board. */
-.settings {
+/* Caregiver dialogs (input settings, demo clock): caregiver palette, smaller type than the child's board. */
+.dialog {
   width: var(--cg-dialog-width);
   padding: var(--space-4);
   border: 1px solid var(--cg-border);
@@ -107,16 +118,16 @@
   line-height: var(--line-height-body);
 }
 
-.settings::backdrop {
+.dialog::backdrop {
   background: color-mix(in srgb, var(--color-ink) 50%, transparent);
 }
 
-.settings h2 {
+.dialog h2 {
   margin: 0 0 var(--space-1);
   font-size: var(--font-size-tile);
 }
 
-.settings p {
+.dialog p {
   margin: 0 0 var(--space-3);
   color: var(--cg-text-muted);
 }
@@ -146,7 +157,8 @@
   color: var(--cg-text-muted);
 }
 
-.close {
+.close,
+.secondary {
   width: 100%;
   height: var(--caregiver-target);
   margin-top: var(--space-3);
@@ -156,6 +168,25 @@
   color: var(--cg-on-accent);
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-bold);
+}
+
+.secondary {
+  margin-top: var(--space-1);
+  border: 1px solid var(--cg-border);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+}
+
+.time {
+  width: 100%;
+  height: var(--caregiver-target);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  font: inherit;
+  font-size: var(--font-size-tile);
+  color: var(--cg-text);
+  accent-color: var(--cg-accent);
 }
 
 .speak {

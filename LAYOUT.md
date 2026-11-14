@@ -32,7 +32,7 @@ x: 16    176 192                                                        1264
 | Region | Position (x, y) | Size | Notes |
 |---|---|---|---|
 | Sentence strip | 16, 0 | 568×120 | 40px text, wraps to 2 lines (~56 characters). Spans the tab column plus grid columns 1-3. Tapping it speaks the sentence. |
-| Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then a reserved 48×48 slot for the demo clock that /f5 adds. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not) and, for one second after each switch message, the source name ("button", "touch", "voice") so the demo audience sees which input fired. |
+| Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then the demo clock (48×48), which opens a time picker; while a demo time is set, the clock is filled teal and every prediction uses that time. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not), then the current activity ("Lunch"). For one second after each switch message, the source name ("button", "touch", "voice") replaces the activity so the demo audience sees which input fired. |
 | Speak | 736, 0 | 256×120 | Double width; the most important action. |
 | Delete | 1008, 0 | 120×120 | Removes the last word. |
 | Clear | 1144, 0 | 120×120 | Far corner, hardest to hit by accident. |
@@ -61,6 +61,11 @@ Grid column x positions: 192, 328, 464, 600, 736, 872, 1008, 1144. Row y positio
 ## Predictions
 
 - Exactly 6 phrases, each **22 characters or fewer** (about 4 words). The Bedrock prompt must say so, and the backend trims or drops longer ones.
+- **Tapping or selecting a phrase speaks it immediately** and logs it. The sentence strip is left as it is.
+- Fetched from `POST /api/predict` on load, every 60 seconds, and right after each spoken sentence. `recent` is the last 3 sentences spoken this session; `time` is local ISO with the UTC offset, or the demo clock's time when one is set.
+- While a fetch is in flight, or if it fails, the previous phrases stay. The row is never empty: it starts with 6 default phrases.
+- The current activity (for example "Lunch") shows in the caregiver cell, read from an optional `activity` field in the reply. It is hidden if the backend does not send one.
+- Predictions only change the text inside the 6 boxes; no symbol tile ever moves.
 
 ## Switch scanning
 
@@ -78,7 +83,7 @@ Scanning is always ready; there is no on/off toggle. The first NEXT shows the hi
    7. Grid row 4
 2. **Item level.** SELECT enters the highlighted group; NEXT then steps through its items from left to right (top to bottom for the tabs). The message bar's items are Speak, Delete, Clear; the sentence strip is not a scan item, since it only repeats Speak. Empty grid slots are skipped.
 3. **Back out.** Stepping past the last item highlights the whole group again; SELECT then returns to the group level without choosing anything.
-4. **After a choice.** Selecting an item acts on it (a tile adds its word, a prediction adds its phrase, Speak speaks, a tab switches category), then scanning returns to the group level **on the same group**, so a nearby next word takes fewer presses.
+4. **After a choice.** Selecting an item acts on it (a tile adds its word, a prediction speaks its phrase, Speak speaks the strip, a tab switches category), then scanning returns to the group level **on the same group**, so a nearby next word takes fewer presses.
 5. **Touch** works at any time and clears the scan highlight.
 6. **Switches.** The Arduino buttons, touch sensor, and vocal switch reach the board over `WS /ws/input/` and call the same NEXT and SELECT. The input settings dialog (from the gear) chooses which sources count; messages from a disabled source are ignored. While the dialog is open, Space and Enter work its own controls instead of scanning.
 

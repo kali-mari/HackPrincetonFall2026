@@ -7,6 +7,10 @@
 
 export type ScanState = { group: number; item: number | null } | null
 
+// How one box is drawn: in the active group at group level, the active item,
+// in the active group at back-out, or in any other group.
+export type ScanMark = 'group' | 'item' | 'back' | 'dim'
+
 export function next(state: ScanState, sizes: number[]): ScanState {
   if (!state) return { group: 0, item: null }
   if (state.item === null) return { group: (state.group + 1) % sizes.length, item: null }

@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import type { ScanMark } from '../scanning'
 import type { Word } from '../data/symbols'
 import styles from './Tile.module.css'
 
-type TileProps = { word: Word; onSelect: (word: Word) => void; scanned?: boolean }
+type TileProps = { word: Word; onSelect: (word: Word) => void; scanned?: ScanMark }
 
 export default function Tile({ word, onSelect, scanned }: TileProps) {
   const [iconFailed, setIconFailed] = useState(false)
