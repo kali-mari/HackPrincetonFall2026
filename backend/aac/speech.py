@@ -16,6 +16,7 @@ from uuid import uuid4
 from django.conf import settings
 
 TIMEOUT_SECONDS = 10
+MP3_BITS_PER_SECOND = 128_000  # matches output_format=mp3_44100_128 below
 MAX_AUDIO_BYTES = 5 * 1024 * 1024
 
 
@@ -47,6 +48,15 @@ PROVIDERS = {'elevenlabs': elevenlabs}
 
 def audio_url(name):
     return f'{settings.BACKEND_PUBLIC_BASE_URL}{settings.MEDIA_URL}audio/{name}'
+
+
+def clip_seconds(url):
+    """Approximate playing time of a clip returned by synthesize (0 if it is missing)."""
+    try:
+        size = (settings.MEDIA_ROOT / 'audio' / url.rsplit('/', 1)[1]).stat().st_size
+    except OSError:
+        return 0.0
+    return size * 8 / MP3_BITS_PER_SECOND
 
 
 def synthesize(text, voice_id=None):

@@ -111,6 +111,25 @@ if not 0 < PREDICT_TIMEOUT_SECONDS <= 10:
 if PREDICT_PROVIDER and PREDICT_PROVIDER not in {'openai', 'anthropic', 'gemini', 'bedrock'}:
     raise ImproperlyConfigured('PREDICT_PROVIDER must be openai, anthropic, gemini, bedrock or blank.')
 
+# On-device speech-to-text for caregiver listen mode. TRANSCRIBE_PROVIDER picks a
+# loader in aac/transcription.py; blank disables it. TRANSCRIBE_DEVICE is passed to
+# the model runtime (cpu today; a GPU runtime provider if one becomes available).
+TRANSCRIBE_PROVIDER = os.environ.get('TRANSCRIBE_PROVIDER', '').strip().lower()
+if TRANSCRIBE_PROVIDER and TRANSCRIBE_PROVIDER not in {'moonshine'}:
+    raise ImproperlyConfigured('TRANSCRIBE_PROVIDER must be moonshine or blank.')
+TRANSCRIBE_MODEL_DIR = env_path('TRANSCRIBE_MODEL_DIR', 'models/moonshine-tiny-en')
+TRANSCRIBE_DEVICE = os.environ.get('TRANSCRIBE_DEVICE', 'cpu').strip().lower() or 'cpu'
+try:
+    TRANSCRIBE_THREADS = int(os.environ.get('TRANSCRIBE_THREADS', '1'))
+except ValueError:
+    TRANSCRIBE_THREADS = 0
+if not 1 <= TRANSCRIBE_THREADS <= 4:
+    raise ImproperlyConfigured('TRANSCRIBE_THREADS must be a whole number from 1 to 4.')
+# Listen mode records from this ALSA device with arecord (for example plughw:1,0 for
+# a USB microphone; see arecord -l), or plays file:<path> in real time instead.
+LISTEN_DEVICE = os.environ.get('LISTEN_DEVICE', 'default').strip() or 'default'
+LISTEN_VAD_MODEL = env_path('LISTEN_VAD_MODEL', 'models/silero_vad.onnx')
+
 # Optional Google Home casting: blank disables it. The speaker fetches audio from
 # BACKEND_PUBLIC_BASE_URL, so that URL must be reachable on the LAN.
 GOOGLE_HOME_HOST = os.environ.get('GOOGLE_HOME_HOST', '').strip()

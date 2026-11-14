@@ -37,7 +37,7 @@ The server runs on `http://localhost:8000`:
 - `POST /api/log`: unchanged legacy shape; saves a spoken event for `LEGACY_DEMO_PATIENT_ID` and returns `{"ok": true}`. No retry safety; 503 if the demo patient has not been seeded.
 - `POST /api/aac/predict`: six phrases ranked from the patient's confirmed spoken history, saved as a `PredictionRecord` whose ID the client sends back on attributed events. 404 unknown patient; 503 only if the record cannot be saved (unreadable history falls back to defaults).
 - `POST /api/predict`: same ranking for `LEGACY_DEMO_PATIENT_ID`, legacy `{"phrases": [...]}` shape, no saved record. Always 200 for a valid request; defaults if the demo patient is missing or storage fails.
-- `POST /api/aac/speak` and `POST /api/speak`: return `{"audio_url": ...}` for an MP3 under `/media/audio/`. Voice: the patient's `preferences.voice_id` (demo patient for legacy), else `SPEECH_VOICE_ID`. 503 when the provider is unconfigured or fails, or audio cannot be saved; never a fake URL. Speaking records no event. If `GOOGLE_HOME_HOST` is set, the audio is also cast in the background.
+- `POST /api/aac/speak` and `POST /api/speak`: return `{"audio_url": ...}` for an MP3 under `/media/audio/`. Voice: the patient's `preferences.voice_id` (demo patient for legacy), else `SPEECH_VOICE_ID`. 503 when the provider is unconfigured or fails, or audio cannot be saved; never a fake URL. Speaking records no event. If `GOOGLE_HOME_HOST` is set, the audio is also cast in the background. Listen mode hears silence while the clip plays. Optional `"prefetch": true` only makes or reuses the cached clip (no cast, no listen pause), so the frontend can prepare the six predicted phrases.
 - `/media/audio/<file>.mp3`: generated audio, served by Django in development (`DJANGO_DEBUG=true`).
 - `/api/learn/*`: JSON 501, with 400 for malformed JSON transport and 405 for wrong methods.
 - `/`: 404 expected.
@@ -60,6 +60,12 @@ The generated admin route remains; no application authentication has been added.
 | `SPEECH_MODEL_ID` | blank | Provider model; blank uses the provider default (`eleven_flash_v2_5` for ElevenLabs) |
 | `SPEECH_CACHE` | `true` | Reuse audio for identical provider/model/voice/text instead of calling the provider again |
 | `ELEVENLABS_API_KEY` | blank | Secret; `.env` only. Blank makes speech 503 |
+| `TRANSCRIBE_PROVIDER` | blank | On-device speech-to-text loader registered in `aac/transcription.py` (`moonshine`); blank turns it off |
+| `TRANSCRIBE_MODEL_DIR` | `models/moonshine-tiny-en` | Model files; absolute or relative to `backend/`. Filled by `manage.py fetch_transcription_model` |
+| `TRANSCRIBE_THREADS` | `1` | CPU threads for decoding, 1 to 4 |
+| `TRANSCRIBE_DEVICE` | `cpu` | Device passed to the model runtime; only `cpu` works on the UNO Q today |
+| `LISTEN_DEVICE` | `default` | ALSA device listen mode records from with `arecord` (for example `plughw:1,0` for a USB mic; see `arecord -l`), or `file:<path>` to play an audio file in real time instead |
+| `LISTEN_VAD_MODEL` | `models/silero_vad.onnx` | Silero voice detector that cuts the recording into phrases. Downloaded by `fetch_transcription_model` |
 | `GOOGLE_HOME_HOST` | blank | Speaker IP; blank disables casting. Startup fails if set while `BACKEND_PUBLIC_BASE_URL` is localhost |
 | `LEGACY_DEMO_PATIENT_ID` | `22222222-2222-4222-8222-222222222222` | Fixed synthetic patient created by `seed_demo` and used by `/api/log` (and later legacy speak/predict); must be a UUID (startup fails otherwise) and must differ from the demo caregiver `11111111-1111-4111-8111-111111111111`. Not a "currently selected patient" setting |
 
@@ -106,6 +112,30 @@ A provider is a function `(system, prompt, model) -> text` that raises on failur
 
 Prediction tests force `PREDICT_PROVIDER=''`, so a provider in your `.env` is never called by `manage.py test`.
 
+## On-device transcription
+
+`aac/transcription.py` turns one speech segment into text for caregiver listen mode, on the device, with no cloud call. `transcribe(pcm)` takes 16 kHz mono signed 16-bit PCM (at most 30 seconds) and returns text; it raises `TranscriptionUnavailable` when the provider is blank or its model or runtime is missing. Audio and transcripts stay in memory and are never logged.
+
+A provider is a loader `(model_dir, threads, device) -> decode(samples) -> text`; register it in `PROVIDERS` (and its download in `MODEL_ARCHIVES`) and set `TRANSCRIBE_PROVIDER`. The model loads on first use and stays resident; one decode runs at a time. To try a different model, add a loader. To try a GPU, set `TRANSCRIBE_DEVICE` to a runtime provider the loader's runtime supports; callers do not change.
+
+`moonshine` is Moonshine tiny (English, int8) through sherpa-onnx. On the UNO Q it measured about a third of one CPU core on one thread, which leaves the other cores for Django and the frontend. Numbers and the GPU attempts are in `hardware/benchmarks/transcription/SHERPA.md`.
+
+```sh
+# in backend/.env: TRANSCRIBE_PROVIDER=moonshine
+python manage.py fetch_transcription_model          # one-time download, about 120 MB, plus the voice detector
+python manage.py transcribe_file sample.wav         # prints the text and decode time
+python manage.py listen                             # live: prints each phrase from the mic; Ctrl-C stops
+python manage.py listen --device file:sample.wav    # the same with a recording played in real time
+```
+
+### Listen mode
+
+`aac/listen.py` records from the microphone on the board (`arecord` on `LISTEN_DEVICE`), cuts the audio into phrases with the Silero voice detector in sherpa-onnx (a phrase ends after about half a second of silence, or at 10 seconds), and transcribes each phrase on a second thread. If transcription falls behind, the oldest waiting phrase is dropped. `WS /ws/conversation/` (`ConversationConsumer`) starts and stops it for one connection at a time and sends each phrase back as `{"type": "transcript", "seq": n, "text": ...}`; the contract is in `docs/api-contracts.md`. While the board speaks, the listener hears silence: each successful speak response calls `listen.pause()` for the clip's length (from the MP3 size at 128 kbit/s) plus a start-up margin, so the board's own voice is not transcribed. Audio and text are never written or logged; the server logs only how long after each phrase its text was ready.
+
+`LISTEN_DEVICE=file:<path>` decodes the file with ffmpeg and hands it to the voice detector at real-time speed, so it behaves like a microphone for demos and timing tests.
+
+For a USB microphone, find its card with `arecord -l` and set `LISTEN_DEVICE=plughw:<card>,0`; `plughw` converts the mic's own rate to 16 kHz mono. Check it with `python manage.py listen` before using the frontend.
+
 ## Checks and tests
 
 ```sh
@@ -115,7 +145,7 @@ python manage.py test
 python manage.py export_openapi > /tmp/aac-openapi.json
 ```
 
-Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 11 remaining scaffolds, the profile feature, event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history) predictions (defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, attribution round trip, fallbacks) and speech (mocked provider, voice selection, caching, file naming, failures, ElevenLabs request shape and errors, cleanup, casting dispatch). No test calls a real provider or speaker. Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
+Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 11 remaining scaffolds, the profile feature, event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history) predictions (defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, attribution round trip, fallbacks) and speech (mocked provider, voice selection, caching, file naming, failures, ElevenLabs request shape and errors, cleanup, casting dispatch, prefetch, listen-mode pause) and listen mode (capture pipeline with a fake source and voice detector, pause, backlog, `/ws/conversation/` messages checked against the OpenAPI schemas). No test calls a real provider or speaker. Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
 
 Manual HTTP smoke checks after starting Django:
 
@@ -160,10 +190,12 @@ aac/
   profile_validation.py     Patient setup/preferences validation
   profiles.py               Profile JSON and signed patient-list cursors
   history.py                Event validation, time buckets, event JSON and cursors
+  transcription.py          Provider-neutral on-device speech-to-text (Moonshine via sherpa-onnx)
   views.py                  CSRF-exempt function views: profiles, events, log, plus JSON 501 scaffolds
   http.py                   Reusable method/JSON transport checks and scaffolds
   validation.py             Explicit value/field/query helpers; no ORM access
-  consumers.py, routing.py  WS /ws/input/ relay (validation, origin check, no echo)
+  listen.py                 Listen mode: mic capture, voice detection, phrase transcription
+  consumers.py, routing.py  WS /ws/input/ relay (validation, origin check, no echo) and WS /ws/conversation/ listen mode
   speech.py                 Provider-neutral TTS (ElevenLabs), caching and audio files
   predictions.py            Deterministic ranking and defaults
   llm.py                    Optional AI predictions (OpenAI, Anthropic, Gemini, Bedrock) with deadline and fallback
