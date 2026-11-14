@@ -45,7 +45,9 @@ def open_serial(port, baud):
 
 
 def connect_ws(url):
-    return connect(url, open_timeout=RETRY_SECONDS)
+    # legacy=True: keep the socket open across loop iterations instead of a with-block
+    # (websockets 17.1+ warns on a bare connect() otherwise)
+    return connect(url, open_timeout=RETRY_SECONDS, legacy=True)
 
 
 def ws_is_open(ws):
