@@ -89,12 +89,18 @@ class ContractTests(SimpleTestCase):
     def test_business_operations_are_explicitly_scaffolded(self):
         for path, methods in self.document["paths"].items():
             for operation in methods.values():
-                implemented = path in ("/api/docs", "/api/openapi.json")
+                implemented = path.startswith('/api/profile/') or path in (
+                    "/api/docs", "/api/openapi.json", "/api/aac/events",
+                    "/api/aac/patients/{id}/events", "/api/log",
+                    "/api/aac/predict", "/api/predict", "/api/aac/speak", "/api/speak",
+                )
                 self.assertEqual(
                     operation["x-implementation-status"],
                     "implemented" if implemented else "scaffolded",
                 )
-                if not implemented:
+                if implemented:
+                    self.assertNotIn('501', operation['responses'])
+                else:
                     self.assertTrue(operation["summary"].startswith("[SCAFFOLD]"))
                     self.assertIn("501", operation["responses"])
         self.assertFalse(any("conversation" in path for path in self.document["paths"]))
@@ -187,6 +193,7 @@ class DocumentationTests(SimpleTestCase):
     def test_offline_swagger_page(self):
         response = self.client.get("/api/docs")
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Profiles are implemented")
         self.assertContains(response, "scaffolded, not feature-complete")
         self.assertContains(response, "/api/openapi.json")
         self.assertNotContains(response, "https://")
@@ -211,7 +218,7 @@ class DocumentationTests(SimpleTestCase):
 
     def test_scaffold_routes_are_not_fake_success_handlers(self):
         response = self.client.post(
-            "/api/aac/predict", {}, content_type="application/json"
+            "/api/learn/analyze", {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 501)
         self.assertEqual(response.json()["error"]["code"], "not_implemented")

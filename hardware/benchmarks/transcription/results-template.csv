@@ -1,0 +1,2 @@
+target_status,model,model_sha256,threads,load_kind,category,sample_count,audio_seconds,load_seconds_median,warm_inference_seconds_median,warm_inference_seconds_p95,warm_rtf_median,peak_worker_rss_bytes,inference_cpu_percent_median,word_errors,reference_words,corpus_wer,silence_nonblank_output_runs,replay_runs,max_pending_audio_seconds,dropped_audio_seconds,speech_end_to_final_seconds_p95,endpoint_latency_sample_count,input_latency_seconds_p95,recommendation
+NOT RUN,tiny.en,,,,,0,,,,,,,,,,,,0,,,,0,,not yet established

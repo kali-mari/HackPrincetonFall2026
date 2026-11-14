@@ -1,7 +1,7 @@
-"""Contract-first OpenAPI document; business routes currently return JSON 501.
+"""OpenAPI contracts with explicit per-operation implementation status.
 
 Keep schemas explicit and export with `python manage.py export_openapi`.
-Business functionality is deferred; scaffold views only check transport basics.
+Profiles, event history, predictions and speech are implemented; unfinished learning routes remain JSON 501 scaffolds.
 """
 
 from copy import deepcopy
@@ -228,7 +228,7 @@ SCHEMAS = {
             "timestamp": TIME,
             "received_at": TIME,
             "activity": nullable(text(100)),
-            "input_source": enum("button", "keyboard"),
+            "input_source": nullable(enum("button", "keyboard")),
             "prediction_id": nullable(UUID),
             "candidate_index": nullable(
                 {"type": "integer", "minimum": 0, "maximum": 5}
@@ -431,9 +431,12 @@ SCHEMAS = {
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
     "InputMessage": obj(
-        {"action": enum("NEXT", "SELECT"), "source": enum("button", "touch", "voice")},
+        {
+            "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK", "LISTEN"),
+            "source": enum("button", "touch", "voice"),
+        },
         ("action", "source"),
-        description="Existing WS compatibility vocabulary. Demo uses buttons; keyboard is handled locally in the frontend, not added to this protocol.",
+        description="Switch input from hardware/bridge.py. Buttons send PREV/NEXT/SELECT/DELETE/SPEAK with source button, and LISTEN (PREV + NEXT held together) toggles caregiver listen mode; the vocal switch and legacy touch always send SELECT. Keyboard is handled locally in the frontend, not added to this protocol.",
     ),
 }
 
@@ -619,10 +622,12 @@ def build_openapi():
         "createCaregiver",
         "profile",
         "Create caregiver",
+        implemented=True,
         request="CaregiverCreate",
         result="Caregiver",
         status=201,
-        errors=(400, 405),
+        errors=(400, 405, 503),
+        description="Persist a caregiver in SQLite. Only display_name is writable; no authentication is provided.",
         request_example={"display_name": "Demo caregiver"},
         response_example=caregiver,
     )
@@ -632,12 +637,14 @@ def build_openapi():
         "createPatient",
         "profile",
         "Create patient and caregiver link",
+        implemented=True,
+        errors=(400, 404, 405, 503),
         request="PatientCreate",
         result="Patient",
         status=201,
         request_example=patient_create,
         response_example=patient,
-        description="Caregiver must exist. Patient and relationship are created atomically. IDs supplied by clients are not authentication.",
+        description="Caregiver must exist with caregiver role (otherwise 404). Patient and relationship are created atomically in SQLite. Validate IANA timezone, language en and complete preferences. IDs supplied by clients are not authentication.",
     )
     add(
         "/api/profile/caregivers/{id}/patients",
@@ -645,6 +652,9 @@ def build_openapi():
         "listPatients",
         "profile",
         "List linked patients",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Stable ascending UUID keyset pagination. Signed cursors are bound to caregiver and order, not page size; malformed, repeated or mismatched cursors/limits and unknown query fields return 400. Results reflect live data, not a snapshot.",
         result="PatientPage",
         parameters=PAGE_PARAMETERS,
         response_example={"patients": [patient], "next_cursor": None},
@@ -655,6 +665,9 @@ def build_openapi():
         "getPatient",
         "profile",
         "Read patient setup",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Read persisted patient setup. A caregiver ID or missing patient returns 404.",
         result="Patient",
         response_example=patient,
     )
@@ -664,6 +677,9 @@ def build_openapi():
         "updatePatient",
         "profile",
         "Update patient setup",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Validate mutable setup fields only; IDs/role cannot change. Supplied preferences replace the complete object. Only language en is currently supported.",
         request="PatientPatch",
         result="Patient",
         request_example={"preferences": patient["preferences"]},
@@ -675,13 +691,15 @@ def build_openapi():
         "deletePatient",
         "profile",
         "Delete patient and owned data",
+        implemented=True,
+        errors=(400, 404, 405, 503),
         status=204,
-        description="Delete links, custom definitions, events, assignments, predictions, analyses and derived configurations. Preserve global system definitions; invalidate caches. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
+        description="Atomically delete patient and caregiver links, preserving caregivers and other patients. Also deletes the patient's communication events and prediction records. Later patient-owned tables must cascade and extend deletion tests as implemented; labels and artifacts are not implemented yet. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
     )
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
-    speech_description = "Text-to-speech, not microphone input. Generate Polly audio and return an absolute playable URL; cast when configured. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event."
-    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. AI wait over two seconds, failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
+    speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
+    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. Optional AI (PREDICT_PROVIDER: openai, anthropic, gemini or bedrock) receives activity, time bucket, recent and the history-ranked phrases as data. AI wait over two seconds (PREDICT_TIMEOUT_SECONDS), failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
     add(
         "/api/speak",
         "post",
@@ -691,7 +709,8 @@ def build_openapi():
         request="LegacySpeakRequest",
         result="SpeakResponse",
         errors=(400, 405, 503),
-        description=speech_description,
+        implemented=True,
+        description=speech_description + " Uses the fixed demo patient's preferences.voice_id when that patient exists, otherwise SPEECH_VOICE_ID.",
         request_example={"text": SIX[0]},
         response_example={"audio_url": "http://localhost:8000/media/audio/demo.mp3"},
     )
@@ -704,8 +723,9 @@ def build_openapi():
         request="LegacyPredictRequest",
         result="LegacyPredictResponse",
         errors=(400, 405),
+        implemented=True,
         description=prediction_description
-        + " Fixed configured demo patient; legacy shape is unchanged.",
+        + " Fixed configured demo patient; legacy shape is unchanged. Saves no prediction record (no ID to attribute). If the demo patient is missing or storage is unavailable, returns six defaults with 200.",
         request_example=predict_request,
         response_example={"phrases": SIX},
     )
@@ -718,7 +738,8 @@ def build_openapi():
         request="LegacyLogRequest",
         result="LegacyLogResponse",
         errors=(400, 405, 503),
-        description="Preserve request shape; success shape is now specified as 200 {ok:true}. SQLite replaces the earlier DynamoDB storage decision. Fixed demo patient. No retry key: blind retries may duplicate speech history.",
+        implemented=True,
+        description="Preserve request shape; success shape is now specified as 200 {ok:true}. Saves a spoken event in SQLite for the fixed LEGACY_DEMO_PATIENT_ID patient, with new server-generated event/utterance IDs, null activity and null input_source. No retry key: blind retries duplicate speech history. 503 if storage is unavailable or the demo patient has not been created with seed_demo.",
         request_example={"text": SIX[0], "timestamp": NOW},
         response_example={"ok": True},
     )
@@ -731,7 +752,8 @@ def build_openapi():
         request="SpeakRequest",
         result="SpeakResponse",
         errors=(400, 404, 405, 503),
-        description=speech_description,
+        implemented=True,
+        description=speech_description + " Uses the patient's preferences.voice_id when set, otherwise SPEECH_VOICE_ID. Unknown or caregiver patient returns 404.",
         request_example={"patient_id": IDS["patient"], "text": SIX[0]},
         response_example={"audio_url": "http://localhost:8000/media/audio/demo.mp3"},
     )
@@ -743,7 +765,10 @@ def build_openapi():
         "Predict patient phrases",
         request="PredictRequest",
         result="PredictResponse",
-        description=prediction_description,
+        errors=(400, 404, 405, 503),
+        implemented=True,
+        description=prediction_description
+        + " Saves a prediction record (activity, time bucket, phrases, source) for event attribution; recent is validated but never stored. Unreadable history falls back to defaults; 503 only if the record cannot be saved. Unknown or caregiver patient returns 404.",
         request_example={"patient_id": IDS["patient"], **predict_request},
         response_example={
             "prediction_id": IDS["prediction"],
@@ -781,7 +806,8 @@ def build_openapi():
                 {"event_id": IDS["event"]},
             )
         },
-        description="event_id is globally unique; identical normalized retries return 200, changed payload returns 409. Same utterance_id links selection, spoken and feedback for one patient; intentional repeated speech uses new utterance/event IDs. At most one spoken event per utterance (409 otherwise). For prediction attribution, text/index must match the same patient's saved prediction. Feedback always identifies a candidate. No raw transcripts accepted.",
+        implemented=True,
+        description="event_id is globally unique; identical normalized retries return 200, changed payload returns 409. Unknown patient, or a prediction_id not saved for this patient, returns 404; text that differs from the referenced candidate returns 400. Reusing an utterance_id for another patient returns 409. time_bucket is computed from the patient's timezone at event time. Same utterance_id links selection, spoken and feedback for one patient; intentional repeated speech uses new utterance/event IDs. At most one spoken event per utterance (409 otherwise). For prediction attribution, text/index must match the same patient's saved prediction. Feedback always identifies a candidate. No raw transcripts accepted.",
         request_example=event_request,
         response_example={"event_id": IDS["event"]},
     )
@@ -794,7 +820,9 @@ def build_openapi():
         "Read patient history",
         result="EventPage",
         parameters=PAGE_PARAMETERS,
-        description="Newest first by (timestamp,event_id); cursor is bound to patient and sort order.",
+        errors=(400, 404, 405, 503),
+        implemented=True,
+        description="Newest first by (timestamp,event_id); signed cursor is bound to patient and sort order. Unknown or caregiver ID returns 404. input_source is null only for legacy /api/log entries.",
         response_example={"events": [event_result], "next_cursor": None},
     )
 
@@ -1028,7 +1056,7 @@ def build_openapi():
         "Read this OpenAPI document",
         implemented=True,
         errors=(405,),
-        description="Implemented documentation endpoint; business endpoints are scaffolded (501).",
+        description="Implemented documentation endpoint; profiles, event history, /api/log, predictions and speech are implemented and learning routes remain scaffolded (501).",
     )
     paths["/api/openapi.json"]["get"]["responses"]["200"] = {
         "description": "OpenAPI 3.1 JSON document",
@@ -1044,7 +1072,7 @@ def build_openapi():
         errors=(405,),
     )
     paths["/api/docs"]["get"]["responses"]["200"] = {
-        "description": "Swagger UI with vendored assets; Try it out exercises scaffold responses",
+        "description": "Swagger UI with vendored assets; Try it out executes implemented operations and remaining scaffolds",
         "content": {"text/html": {"schema": {"type": "string"}}},
     }
     return deepcopy(
@@ -1053,7 +1081,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation routes are implemented. Business routes marked SCAFFOLD are wired and return JSON 501 until features are implemented; only transport-level JSON/method checks currently run. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log, deterministic predictions and speech (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining learning routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {
@@ -1069,11 +1097,11 @@ def build_openapi():
             "components": {"schemas": deepcopy(SCHEMAS)},
             "x-websocket": {
                 "path": "/ws/input/",
-                "status": "planned",
+                "status": "implemented",
                 "group": "input",
                 "message": ref("InputMessage"),
-                "example": {"action": "NEXT", "source": "button"},
-                "description": "Single local active board. Plain serial lines at 9600 baud. Button demo sends NEXT/SELECT. Space/Enter handled by frontend. No conversation streaming on this group.",
+                "example": {"action": "SPEAK", "source": "button"},
+                "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, LISTEN, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
             },
         }
     )
