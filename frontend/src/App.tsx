@@ -2,16 +2,25 @@ import { useEffect, useRef, useState } from 'react'
 import { logSentence, predict, speak } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, DEFAULT_PREDICTIONS, type Word } from './data/symbols'
-import { next, select, type ScanMark, type ScanState } from './scanning'
+import { next, prev, select, type ScanMark, type ScanState } from './scanning'
 import { useSwitchInput, type Source, type SourceSettings } from './useSwitchInput'
 import styles from './App.module.css'
 
 const SETTINGS_KEY = 'aac-input-sources'
+const HOME_KEY = 'aac-play-on-home'
 const SOURCES: { id: Source; label: string; hint: string }[] = [
-  { id: 'button', label: 'Buttons', hint: 'The NEXT and SELECT switches' },
+  { id: 'button', label: 'Buttons', hint: 'The PREV, NEXT, WORD, DEL and SAY switches' },
   { id: 'touch', label: 'Touch pad', hint: 'The touch sensor' },
   { id: 'voice', label: 'Voice switch', hint: 'A sound held for about half a second' },
 ]
+
+function loadPlayOnHome(): boolean {
+  try {
+    return localStorage.getItem(HOME_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
 
 function loadSettings(): SourceSettings {
   const all = { button: true, touch: true, voice: true }
@@ -57,6 +66,8 @@ export default function App() {
   const [error, setError] = useState('')
   const [scan, setScan] = useState<ScanState>(null)
   const [sources, setSources] = useState(loadSettings)
+  const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
+  const [listening, setListening] = useState(false)
   const settingsDialog = useRef<HTMLDialogElement>(null)
   const clockDialog = useRef<HTMLDialogElement>(null)
   const clockInput = useRef<HTMLInputElement>(null)
@@ -72,6 +83,15 @@ export default function App() {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated))
     } catch {
       // Private mode or blocked storage: the setting still applies for this session.
+    }
+  }
+
+  function togglePlayOnHome() {
+    setPlayOnHome(!playOnHome)
+    try {
+      localStorage.setItem(HOME_KEY, String(!playOnHome))
+    } catch {
+      // Same as toggleSource: applies for this session only.
     }
   }
 
@@ -119,7 +139,9 @@ export default function App() {
     if (!sentenceText || speaking) return
     setSpeaking(true)
     try {
-      await playAudio(await speak(sentenceText))
+      const url = await speak(sentenceText)
+      // The backend casts to the Google Home itself; playing here too would echo.
+      if (!playOnHome) await playAudio(url)
     } catch (err) {
       console.error(err)
       setError("Couldn't speak. Try again.")
@@ -129,8 +151,9 @@ export default function App() {
       setSpeaking(false)
     }
     if (fromStrip) setSentence([])
+    // Only confirmed local playback counts as spoken (api-contracts.md event lifecycle); a cast is unconfirmed.
     // The child was already heard, so a failed log is not worth an error banner.
-    logSentence(sentenceText).catch(console.error)
+    if (!playOnHome) logSentence(sentenceText).catch(console.error)
     setRecent((r) => [...r, sentenceText].slice(-RECENT_COUNT))
   }
   const handleSpeak = () => say(text, true)
@@ -189,7 +212,15 @@ export default function App() {
     if (result.activate) groups[result.activate[0]][result.activate[1]].action()
   }
 
-  const { connected, flash } = useSwitchInput(sources, (action) => (action === 'NEXT' ? scanNext() : scanSelect()))
+  // DELETE and SPEAK act directly and leave the highlight where it is.
+  const { connected, flash } = useSwitchInput(sources, (action) => {
+    if (action === 'PREV') setScan(prev(scan, sizes))
+    else if (action === 'NEXT') scanNext()
+    else if (action === 'SELECT') scanSelect()
+    else if (action === 'DELETE') deleteLast()
+    else if (action === 'SPEAK') handleSpeak()
+    else setListening((l) => !l)
+  })
 
   // Re-bound every render so the handler always sees the current groups and state.
   useEffect(() => {
@@ -249,6 +280,12 @@ export default function App() {
               </svg>
             </button>
           </div>
+          {/* State only for now; speech-to-text is not built yet. */}
+          {listening && (
+            <p className={styles.listening} role="status">
+              Listening
+            </p>
+          )}
           <p className={styles.connection}>
             <span className={connected ? styles.dotOn : styles.dotOff} />
             <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
@@ -353,6 +390,13 @@ export default function App() {
             </span>
           </label>
         ))}
+        <label className={styles.source}>
+          <input type="checkbox" checked={playOnHome} onChange={togglePlayOnHome} />
+          <span>
+            <strong>Play on Google Home</strong>
+            <span>The backend casts speech there, so this screen stays silent</span>
+          </span>
+        </label>
         <button className={styles.close} onClick={() => settingsDialog.current?.close()}>
           Done
         </button>

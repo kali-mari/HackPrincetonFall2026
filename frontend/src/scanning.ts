@@ -1,4 +1,4 @@
-// Step scanning per LAYOUT.md. Pure functions, no timers: state only changes on next() or select().
+// Step scanning per LAYOUT.md. Pure functions, no timers: state only changes on next(), prev() or select().
 //
 // null           no highlight (start, or after any tap)
 // item === null  group level: the whole group is highlighted
@@ -15,6 +15,14 @@ export function next(state: ScanState, sizes: number[]): ScanState {
   if (!state) return { group: 0, item: null }
   if (state.item === null) return { group: (state.group + 1) % sizes.length, item: null }
   return { group: state.group, item: (state.item + 1) % (sizes[state.group] + 1) }
+}
+
+// Mirror of next(): back one group, or back one item (item 0 wraps to back-out).
+export function prev(state: ScanState, sizes: number[]): ScanState {
+  if (!state) return { group: sizes.length - 1, item: null }
+  if (state.item === null) return { group: (state.group - 1 + sizes.length) % sizes.length, item: null }
+  const span = sizes[state.group] + 1
+  return { group: state.group, item: (state.item - 1 + span) % span }
 }
 
 export function select(

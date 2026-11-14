@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
 export type Source = 'button' | 'touch' | 'voice'
-export type Action = 'NEXT' | 'SELECT'
+export type Action = 'PREV' | 'NEXT' | 'SELECT' | 'DELETE' | 'SPEAK' | 'LISTEN'
+const ACTIONS: Action[] = ['PREV', 'NEXT', 'SELECT', 'DELETE', 'SPEAK', 'LISTEN']
 export type SourceSettings = Record<Source, boolean>
 
 const MAX_BACKOFF_MS = 5000
@@ -10,8 +11,9 @@ const FLASH_MS = 1000
 function parse(data: unknown): { action: Action; source: Source } | null {
   try {
     const msg = JSON.parse(String(data))
-    const validAction = msg.action === 'NEXT' || msg.action === 'SELECT'
-    const validSource = msg.source === 'button' || msg.source === 'touch' || msg.source === 'voice'
+    const validAction = ACTIONS.includes(msg.action)
+    // Per the contract, only buttons send actions other than SELECT.
+    const validSource = msg.source === 'button' || ((msg.source === 'touch' || msg.source === 'voice') && msg.action === 'SELECT')
     return validAction && validSource ? msg : null
   } catch {
     return null

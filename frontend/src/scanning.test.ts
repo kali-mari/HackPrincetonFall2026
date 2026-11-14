@@ -1,7 +1,7 @@
 // Run with: node --test src/scanning.test.ts (Node 24 runs TypeScript directly)
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { next, select } from './scanning.ts'
+import { next, prev, select } from './scanning.ts'
 
 const sizes = [3, 6, 4]
 
@@ -26,4 +26,13 @@ test('stepping past the last item reaches back-out, which leaves without choosin
   assert.deepEqual(select(s, sizes), { state: { group: 0, item: null }, activate: null })
   s = next(s, sizes)
   assert.deepEqual(s, { group: 0, item: 0 })
+})
+
+test('prev mirrors next for groups and items, wrapping both ways', () => {
+  assert.deepEqual(prev(null, sizes), { group: 2, item: null })
+  assert.deepEqual(prev({ group: 0, item: null }, sizes), { group: 2, item: null })
+  assert.deepEqual(prev({ group: 0, item: 0 }, sizes), { group: 0, item: 3 })
+  for (const s of [{ group: 1, item: null }, { group: 1, item: 4 }, { group: 0, item: 3 }]) {
+    assert.deepEqual(prev(next(s, sizes), sizes), s)
+  }
 })

@@ -68,6 +68,16 @@
   border-color: var(--cg-accent);
 }
 
+.listening {
+  margin: 0;
+  padding: 0 var(--space-1);
+  border-radius: var(--cg-radius);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+}
+
 .activity {
   text-transform: capitalize;
 }
