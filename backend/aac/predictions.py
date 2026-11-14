@@ -14,7 +14,7 @@ DEFAULT_PHRASES = (
 
 
 def validate_prediction_request(payload, fields):
-    """Return (time, activity); `recent` is checked but never stored or ranked."""
+    """Return (time, activity); `recent` is checked, never stored, and only sent to the optional AI provider."""
     validate_fields(payload, allowed=fields, required=fields)
     recent = payload['recent']
     if not isinstance(recent, list) or len(recent) > 20:
