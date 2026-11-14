@@ -16,6 +16,7 @@ export default function Caregiver() {
   const [spoken, setSpoken] = useState<LogEvent[] | null>(null)
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [error, setError] = useState('')
+  const [today] = useState(() => new Date())
 
   useEffect(() => {
     const today = new Date().toDateString()
@@ -46,7 +47,7 @@ export default function Caregiver() {
         <div>
           <h1>Today</h1>
           <p className={styles.muted}>
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+            {today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
         </div>
         <a className={styles.back} href="#/">

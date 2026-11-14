@@ -36,7 +36,7 @@
   --scan-outline: var(--scan-outline-width) solid var(--scan-color);
   --scan-scale: 1.05;
   --scan-tint: color-mix(in srgb, var(--scan-color) 25%, var(--color-page)); /* group-level inner ring */
-  --scan-dim-opacity: 0.6; /* groups that are not active */
+  --scan-dim-opacity: 0.75; /* groups that are not active; 0.75 keeps every label at AAA (7.8:1 or more) */
 
   /* Typography */
   --font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;

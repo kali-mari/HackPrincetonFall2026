@@ -66,6 +66,7 @@ async function playAudio(url: string) {
 
 export default function App() {
   const [sentence, setSentence] = useState<string[]>([])
+  const [cleared, setCleared] = useState<string[]>([]) // what Clear removed, until the next word is added
   const [categoryId, setCategoryId] = useState(CATEGORIES[0].id)
   const [scale, setScale] = useState(fitScale)
   const [speaking, setSpeaking] = useState(false)
@@ -109,7 +110,10 @@ export default function App() {
 
   const category = CATEGORIES.find((c) => c.id === categoryId)!
   const text = sentence.join(' ')
-  const addWords = (words: string[]) => setSentence((s) => [...s, ...words])
+  const addWords = (words: string[]) => {
+    setCleared([])
+    setSentence((s) => [...s, ...words])
+  }
   const addTile = (word: Word) => addWords([word.label])
 
   // On load, every 60 seconds, and right away when the demo clock changes or a sentence is spoken.
@@ -164,8 +168,16 @@ export default function App() {
   }
   const handleSpeak = () => say(text, true)
 
-  const deleteLast = () => setSentence((s) => s.slice(0, -1))
-  const clear = () => setSentence([])
+  // Delete on an empty strip right after Clear brings the sentence back, so one slip never costs a whole sentence.
+  function deleteLast() {
+    if (sentence.length) return setSentence((s) => s.slice(0, -1))
+    setSentence(cleared)
+    setCleared([])
+  }
+  const clear = () => {
+    if (sentence.length) setCleared(sentence)
+    setSentence([])
+  }
 
   // Row by row: 2 pinned core words, then 6 category slots. Empty slots keep their place.
   const cells: (Word | undefined)[] = []
@@ -251,11 +263,17 @@ export default function App() {
         style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
         onPointerDown={() => setScan(null)}
       >
+        <h1 className={styles.visuallyHidden}>Smart AAC Board</h1>
+        {/* Announces each spoken sentence to screen readers. */}
+        <p className={styles.visuallyHidden} role="status">
+          {recent.at(-1)}
+        </p>
         <button
           className={styles.strip}
           onClick={handleSpeak}
           disabled={speaking}
           aria-label={`Sentence: ${text || 'empty'}. Tap to speak.`}
+          tabIndex={-1} // repeats Speak, so keyboard focus skips it and follows the scan order
         >
           <span className={styles.chips}>
             {sentence.map((label, i) => (
@@ -266,49 +284,11 @@ export default function App() {
           </span>
         </button>
 
-        {/* Caregiver controls: never in the scan order. */}
-        <div className={styles.status}>
-          <div className={styles.statusTools}>
-            <button
-              className={styles.tool}
-              onClick={() => settingsDialog.current?.showModal()}
-              aria-label="Input settings"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
-                <circle cx="16" cy="7" r="2" />
-                <circle cx="10" cy="17" r="2" />
-              </svg>
-            </button>
-            <button
-              className={styles.tool}
-              onClick={() => clockDialog.current?.showModal()}
-              aria-label={demoTime ? `Demo clock: ${demoTime}` : 'Demo clock: real time'}
-              aria-pressed={Boolean(demoTime)}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-            </button>
-          </div>
-          {/* State only for now; speech-to-text is not built yet. */}
-          {listening && (
-            <p className={styles.listening} role="status">
-              Listening
-            </p>
-          )}
-          <p className={styles.connection}>
-            <span className={connected ? styles.dotOn : styles.dotOff} />
-            <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
-            {/* A switch flash briefly replaces the activity name. */}
-            {flash ? <span>{flash}</span> : <span className={styles.activity}>{activity}</span>}
-          </p>
-        </div>
         <button
           className={styles.speak}
           onClick={handleSpeak}
           disabled={speaking}
+          aria-disabled={!text}
           aria-busy={speaking}
           data-scan={scanned('speak')}
         >
@@ -370,6 +350,46 @@ export default function App() {
               <div key={i} aria-hidden />
             ),
           )}
+        </div>
+
+        {/* Caregiver controls: never in the scan order, so they come last in keyboard focus too. */}
+        <div className={styles.status}>
+          <div className={styles.statusTools}>
+            <button
+              className={styles.tool}
+              onClick={() => settingsDialog.current?.showModal()}
+              aria-label="Input settings"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                <circle cx="16" cy="7" r="2" />
+                <circle cx="10" cy="17" r="2" />
+              </svg>
+            </button>
+            <button
+              className={styles.tool}
+              onClick={() => clockDialog.current?.showModal()}
+              aria-label={demoTime ? `Demo clock: ${demoTime}` : 'Demo clock: real time'}
+              aria-pressed={Boolean(demoTime)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </button>
+          </div>
+          {/* State only for now; speech-to-text is not built yet. */}
+          {listening && (
+            <p className={styles.listening} role="status">
+              Listening
+            </p>
+          )}
+          <p className={styles.connection}>
+            <span className={connected ? styles.dotOn : styles.dotOff} />
+            <span className={styles.visuallyHidden}>{connected ? 'Switches connected' : 'Switches not connected'}</span>
+            {/* A switch flash briefly replaces the activity name. */}
+            {flash ? <span>{flash}</span> : <span className={styles.activity}>{activity}</span>}
+          </p>
         </div>
       </main>
 

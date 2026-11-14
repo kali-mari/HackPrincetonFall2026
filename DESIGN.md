@@ -9,7 +9,7 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 - **Fitzgerald Key fills**: soft pastels in the colors AAC users and therapists already know, so the board needs no relearning.
 - **People & pronouns `#FFF3A3` (yellow), verbs `#C9F2C2` (green), describing `#C9E2FF` (blue), nouns `#FFD8A8` (orange), social `#FFD4EA` (pink), negation `#FFC8C2` (red)**: black text on each is 14:1 to 19:1, well past AAA (7:1), so labels stay readable under classroom glare.
 - **Black text; 2px tile borders in a darker shade of the tile's own fill** (the fill mixed 50% with black): tiles stay distinct from the white page and from each other even for color-blind viewers, without a heavy black grid. Controls without a Fitzgerald fill keep a 2px black border.
-- **Speak is solid black with white text and a speaker icon**: the largest, darkest box on the board, so it is the most prominent control without adding a new color.
+- **Speak is solid black with white text and a speaker icon**: the largest, darkest box on the board, so it is the most prominent control without adding a new color. While the strip is empty it is an outlined white box like Delete (and `aria-disabled`), so turning black with the first word says "ready to speak".
 - **White page**: the pastel tiles are the only color on the board, so category reads instantly.
 - **Caregiver palette (slate `#1E293B` on `#F6F8FA`, teal `#0F5257` accent)**: a calm, separate world so adults never confuse the dashboard with the child's board; all text pairs pass AAA.
 
@@ -19,13 +19,13 @@ An 8 year old nonverbal child with limited motor control, using a laptop or tabl
 - **Group level**: every box in the active group gets the outline plus a lavender inner ring; the tile fills keep their true Fitzgerald colors.
 - **Item level**: only the active item gets the outline and a 1.05 scale, a second, non-color cue for color-blind viewers.
 - **Back-out**: the whole group again, but with a dashed outline and no tint, so "leave this row" never looks like "choose this row".
-- **Everything else dims to 60%**: the eye goes straight to the active group from across the room.
+- **Everything else dims to 75%**: the eye goes straight to the active group from across the room, and dimmed labels still meet AAA (7.8:1 or more; 60% dropped them to 4.6:1).
 
 ## Typography
 - **Atkinson Hyperlegible**: designed by the Braille Institute so similar letters (I/l/1, O/0) never get mixed up.
 - **Tile labels 24px bold**: the required minimum, bold for distance reading.
 - **Sentence strip 40px**: above the 36px floor; this is the line the child and listeners read together. The strip is a white bar with a 4px black border; each word sits in a mini tile chip with its own Fitzgerald fill and darker border, so the sentence keeps the colors it was built from. Two rows of chips fit; when a sentence is longer, the oldest words scroll out of view at the top.
-- **Prediction row 28px**: sits between tile labels and the strip in importance.
+- **Prediction row 28px bold**: sits between tile labels and the strip in importance; bold so the phrases read as things to say, not as controls like Delete and Clear.
 
 ## Spacing and size
 - **8px grid**: every space is a multiple of 8, so layouts line up without guesswork.

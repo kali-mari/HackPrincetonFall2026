@@ -34,7 +34,7 @@ x: 16    176 192                                                        1264
 | Sentence strip | 16, 0 | 568×120 | 40px words as Fitzgerald-colored chips, 2 rows; longer sentences keep the newest words in view. Spans the tab column plus grid columns 1-3. Tapping it speaks the sentence. |
 | Caregiver cell | 600, 0 | 120×120 | Above grid column 4. **Not in the scan order**; adults only. Top row: the input settings gear (48×48, an adult tap target above the 44px minimum), then the demo clock (48×48), which opens a time picker; while a demo time is set, the clock is filled teal and every prediction uses that time. Bottom row: the switch connection dot (green and filled when connected, gray and hollow when not), then the current activity ("Lunch"). For one second after each switch message, the source name ("button", "touch", "voice") replaces the activity so the demo audience sees which input fired. |
 | Speak | 736, 0 | 256×120 | Double width; the most important action. |
-| Delete | 1008, 0 | 120×120 | Removes the last word. |
+| Delete | 1008, 0 | 120×120 | Removes the last word. On an empty strip right after Clear, it brings the cleared sentence back (until a new word is added). |
 | Clear | 1144, 0 | 120×120 | Far corner, hardest to hit by accident. |
 | Predictions | 16, 136 | 6 × ~195×120 | Equal widths with 16px gaps. 28px text, 2 lines. |
 | Category tabs | 16, 272 | 4 × 160×120 | One tab per grid row. Selected tab marked by a thick bar and bold text, not color alone. Labels wrap to 2 lines at 24px. |
@@ -85,6 +85,7 @@ Scanning is always ready; there is no on/off toggle. The first NEXT shows the hi
 3. **Back out.** Stepping past the last item highlights the whole group again; SELECT then returns to the group level without choosing anything.
 4. **After a choice.** Selecting an item acts on it (a tile adds its word, a prediction speaks its phrase, Speak speaks the strip, a tab switches category), then scanning returns to the group level **on the same group**, so a nearby next word takes fewer presses.
 5. **Touch** works at any time and clears the scan highlight.
+   **Tab focus** follows the same order (Speak, Delete, Clear, predictions, tabs, grid rows); the sentence strip is skipped, and the caregiver cell comes last.
 6. **Switches.** The Arduino buttons, touch sensor, and vocal switch reach the board over `WS /ws/input/` and call the same NEXT and SELECT. The input settings dialog (from the gear) chooses which sources count; messages from a disabled source are ignored. While the dialog is open, Space and Enter work its own controls instead of scanning.
 
 The scan highlight is drawn inside each box, because the top and bottom rows touch the screen edge where an outside outline would be cut off. A white ring inside the violet keeps it visible on every fill, including the black Speak button.
