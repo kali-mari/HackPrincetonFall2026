@@ -13,7 +13,9 @@ Written 2026-11-14. Picks up from the UNO Q transcription benchmarks.
 - **Why it no longer matters:** Moonshine measured about 0.38 of one core on the
   5-minute session, against about three cores for Whisper. That leaves the other
   cores for Django and the frontend.
-- **Nothing is committed.** All changes below are in the working tree.
+- **Committed and in review:** everything below is on this branch, in PR
+  [kali-mari/HackPrincetonFall2026#4](https://github.com/kali-mari/HackPrincetonFall2026/pull/4)
+  against `main`. The repo has no CI checks.
 
 ## Measured on the UNO Q (one CPU thread, clean recordings)
 
@@ -32,7 +34,7 @@ Zipformer is the alternative if live word-by-word text is wanted. It was not cho
 because its output is upper case without punctuation and it dropped the first two
 words of one short clip.
 
-## What changed in the working tree
+## What changed on this branch
 
 Backend:
 
@@ -75,7 +77,7 @@ ADB binary: `~/Library/Application Support/arduino_applab_workspace/arduino15/da
 
 - `/home/arduino/hardware/benchmarks/transcription/`: benchmark scripts, and under
   `local/sherpa/` the wheels, both models and all result folders.
-- `/home/arduino/backend/`: a copy of the working-tree backend (no `.env` secrets,
+- `/home/arduino/backend/`: a copy of this branch's backend (no `.env` secrets,
   no database copied), with `.venv` created by `python3 -m venv --without-pip` and
   pip 25.1.1 bootstrapped from its wheel.
 - **No system packages were installed.** `sudo` on the board asks for a password,
@@ -107,8 +109,7 @@ ADB binary: `~/Library/Application Support/arduino_applab_workspace/arduino15/da
    the segmenter that was measured and can be reused.
 2. **Transcription beside the running app** on the board has not been measured.
 3. **Real microphone, room noise** and short everyday caregiver phrases are untested.
-4. **Commit and PR.** Untracked `hardware/__pycache__/` and
-   `hardware/tests/__pycache__/` were already there and should stay out of the commit.
+4. **Merge PR #4** once it is reviewed.
 
 ## Pick-up commands
 
