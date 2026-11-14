@@ -5,15 +5,18 @@ import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType 
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
 import { EMPTY_STRIP, addWords, clearStrip, deleteLast as deleteFromStrip } from './sentence'
 import { useSwitchInput, type Action, type Source, type SourceSettings } from './useSwitchInput'
+import { useVoiceSwitch } from './useVoiceSwitch'
 import styles from './App.module.css'
 import tileStyles from './components/Tile.module.css'
 
 const SETTINGS_KEY = 'aac-input-sources'
 const HOME_KEY = 'aac-play-on-home'
+const SENSITIVITY_KEY = 'aac-voice-sensitivity'
+const DEFAULT_SENSITIVITY = 0.7
 const SOURCES: { id: Source; label: string; hint: string }[] = [
   { id: 'button', label: 'Buttons', hint: 'The PREV, NEXT, WORD, DEL and SAY switches' },
   { id: 'touch', label: 'Touch pad', hint: 'The touch sensor' },
-  { id: 'voice', label: 'Voice switch', hint: 'A sound held for about half a second' },
+  { id: 'voice', label: 'Voice switch', hint: 'The laptop microphone hears a sound held for about half a second' },
 ]
 
 function loadPlayOnHome(): boolean {
@@ -24,8 +27,17 @@ function loadPlayOnHome(): boolean {
   }
 }
 
+function loadSensitivity(): number {
+  try {
+    return Number(localStorage.getItem(SENSITIVITY_KEY)) || DEFAULT_SENSITIVITY
+  } catch {
+    return DEFAULT_SENSITIVITY
+  }
+}
+
 function loadSettings(): SourceSettings {
-  const all = { button: true, touch: true, voice: true }
+  // Voice starts off: it needs microphone permission. Stored choices still win.
+  const all = { button: true, touch: true, voice: false }
   try {
     return { ...all, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') }
   } catch {
@@ -105,6 +117,7 @@ export default function App() {
   const [scan, setScan] = useState<ScanState>(null)
   const [sources, setSources] = useState(loadSettings)
   const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
+  const [sensitivity, setSensitivity] = useState(loadSensitivity)
   const [listening, setListening] = useState(false)
   const [started, setStarted] = useState(false) // Chrome plays no sound until someone taps the page once
   const settingsDialog = useRef<HTMLDialogElement>(null)
@@ -123,6 +136,15 @@ export default function App() {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated))
     } catch {
       // Private mode or blocked storage: the setting still applies for this session.
+    }
+  }
+
+  function changeSensitivity(value: number) {
+    setSensitivity(value)
+    try {
+      localStorage.setItem(SENSITIVITY_KEY, String(value))
+    } catch {
+      // Same as toggleSource: applies for this session only.
     }
   }
 
@@ -284,7 +306,12 @@ export default function App() {
   }
 
   // The board stays mounted under the caregiver page so its state survives; it ignores input there.
-  const { connected, flash } = useSwitchInput(sources, (action, now) => onCaregiverPage() || act(action, now))
+  const { connected, flash, showFlash } = useSwitchInput(sources, (action, now) => onCaregiverPage() || act(action, now))
+  // Per the contract, voice always means SELECT. Higher sensitivity is a lower level threshold.
+  const voice = useVoiceSwitch(sources.voice, 1 - sensitivity, () => {
+    if (!onCaregiverPage()) act('SELECT', performance.now())
+    showFlash('voice')
+  })
 
   // Re-bound every render so the handler always sees the current groups and state.
   useEffect(() => {
@@ -487,6 +514,34 @@ export default function App() {
             </span>
           </label>
         ))}
+        {sources.voice && (
+          <div className={styles.voice}>
+            <label>
+              Voice sensitivity
+              <input
+                type="range"
+                min={0.05}
+                max={0.95}
+                step={0.05}
+                value={sensitivity}
+                onChange={(e) => changeSensitivity(Number(e.target.value))}
+              />
+            </label>
+            {voice.error ? (
+              <p role="status">
+                {voice.error === 'denied'
+                  ? 'Microphone access is blocked. Allow it in the browser to use the voice switch.'
+                  : 'No microphone found for the voice switch.'}
+              </p>
+            ) : (
+              // The bar must cross the line and stay there for half a second to count.
+              <div className={styles.meter} role="meter" aria-label="Microphone level" aria-valuenow={voice.level} aria-valuemin={0} aria-valuemax={1}>
+                <span className={styles.meterLevel} style={{ width: `${voice.level * 100}%` }} />
+                <span className={styles.meterThreshold} style={{ left: `${(1 - sensitivity) * 100}%` }} />
+              </div>
+            )}
+          </div>
+        )}
         <label className={styles.source}>
           <input type="checkbox" checked={playOnHome} onChange={togglePlayOnHome} />
           <span>

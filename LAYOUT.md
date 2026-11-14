@@ -88,10 +88,11 @@ Scanning is always ready; there is no on/off toggle. The first NEXT shows the hi
 4. **After a choice.** Selecting an item acts on it (a tile adds its word, a prediction speaks its phrase, Speak speaks the strip, a tab switches category), then scanning returns to the group level **on the same group**, so a nearby next word takes fewer presses.
 5. **Touch** works at any time and clears the scan highlight.
    **Tab focus** follows the same order (Speak, Delete, Clear, predictions, tabs, grid rows); the sentence strip is skipped, and the caregiver cell comes last.
-6. **Switches.** The five Arduino buttons (and the optional vocal switch) reach the board over `WS /ws/input/`:
+6. **Switches.** The five Arduino buttons reach the board over `WS /ws/input/`:
    - **PREV** steps back: one group at group level, one item at item level (wrapping through the back-out state), and to the last group when nothing is highlighted. **NEXT** and **SELECT** work as above.
    - **DELETE** and **SPEAK** act directly from any scan state and leave the highlight where it is.
    - **LISTEN** (PREV and NEXT held together) toggles the "Listening" indicator. The hardware sends PREV and NEXT just before it, so the board restores the scan state from before those two presses.
+   - **Voice switch**: the laptop microphone, not the Arduino. A sound above the threshold for 500ms (dips under 100ms don't break it) sends one SELECT; the sound must stop before it can fire again. Off by default, since it needs mic permission; the mic opens only while it is on. The settings dialog has a sensitivity slider and a live level meter. Logic in `frontend/src/voice.ts`.
    - **Keyboard**, same actions: Space = NEXT, Enter = SELECT, ArrowLeft = PREV, Backspace = DELETE, Shift+Enter = SPEAK, L = LISTEN. The input settings dialog (from the gear) chooses which sources count; messages from a disabled source are ignored. While the dialog is open, Space and Enter work its own controls instead of scanning.
 
 The scan highlight is drawn inside each box, because the top and bottom rows touch the screen edge where an outside outline would be cut off. A white ring inside the violet keeps it visible on every fill, including the black Speak button.

@@ -210,6 +210,7 @@
 .source input {
   width: var(--space-3);
   height: var(--space-3);
+  flex-shrink: 0; /* long hints wrapped and squeezed the checkbox */
   margin: 0;
   accent-color: var(--cg-accent);
 }
@@ -221,6 +222,51 @@
 
 .source span span {
   color: var(--cg-text-muted);
+}
+
+/* Voice switch tuning, indented under its checkbox (checkbox width + gap). */
+.voice {
+  margin: 0 0 var(--space-2) calc(var(--space-3) + var(--space-2));
+}
+
+.voice label {
+  display: flex;
+  flex-direction: column;
+  font-weight: var(--font-weight-bold);
+}
+
+.voice input {
+  width: 100%;
+  height: var(--caregiver-target);
+  margin: 0;
+  accent-color: var(--cg-accent);
+}
+
+.voice p {
+  margin: 0;
+}
+
+.meter {
+  position: relative;
+  height: var(--space-2);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-bg);
+  overflow: hidden;
+}
+
+.meterLevel {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--cg-accent);
+}
+
+/* The threshold line: the level must pass it for half a second. */
+.meterThreshold {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--cg-text);
 }
 
 .close,
