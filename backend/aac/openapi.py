@@ -1,7 +1,7 @@
 """OpenAPI contracts with explicit per-operation implementation status.
 
 Keep schemas explicit and export with `python manage.py export_openapi`.
-Profiles and event history are implemented; unfinished AAC/learning routes remain JSON 501 scaffolds.
+Profiles, event history and deterministic predictions are implemented; unfinished speech/learning routes remain JSON 501 scaffolds.
 """
 
 from copy import deepcopy
@@ -719,8 +719,9 @@ def build_openapi():
         request="LegacyPredictRequest",
         result="LegacyPredictResponse",
         errors=(400, 405),
+        implemented=True,
         description=prediction_description
-        + " Fixed configured demo patient; legacy shape is unchanged.",
+        + " Fixed configured demo patient; legacy shape is unchanged. Saves no prediction record (no ID to attribute). If the demo patient is missing or storage is unavailable, returns six defaults with 200.",
         request_example=predict_request,
         response_example={"phrases": SIX},
     )
@@ -759,7 +760,10 @@ def build_openapi():
         "Predict patient phrases",
         request="PredictRequest",
         result="PredictResponse",
-        description=prediction_description,
+        errors=(400, 404, 405, 503),
+        implemented=True,
+        description=prediction_description
+        + " Saves a prediction record (activity, time bucket, phrases, source) for event attribution; recent is validated but never stored. Unreadable history falls back to defaults; 503 only if the record cannot be saved. Unknown or caregiver patient returns 404.",
         request_example={"patient_id": IDS["patient"], **predict_request},
         response_example={
             "prediction_id": IDS["prediction"],
@@ -1047,7 +1051,7 @@ def build_openapi():
         "Read this OpenAPI document",
         implemented=True,
         errors=(405,),
-        description="Implemented documentation endpoint; profiles, event history and /api/log are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
+        description="Implemented documentation endpoint; profiles, event history, /api/log and predictions are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
     )
     paths["/api/openapi.json"]["get"]["responses"]["200"] = {
         "description": "OpenAPI 3.1 JSON document",
@@ -1072,7 +1076,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history and legacy /api/log are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log and deterministic predictions (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {

@@ -150,7 +150,7 @@ class DevelopmentCorsTests(SimpleTestCase):
         ):
             with self.subTest(status=status):
                 response = self.client.post(
-                    '/api/predict', body, content_type=content_type,
+                    '/api/speak', body, content_type=content_type,
                     HTTP_ORIGIN='http://localhost:5173',
                 )
                 self.assertEqual(response.status_code, status)

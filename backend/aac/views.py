@@ -14,6 +14,7 @@ from .history import (
     Conflict, event_cursor, event_json, read_event_cursor, same_event, time_bucket, validate_event,
 )
 from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Profile
+from .predictions import predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
 from .validation import (
@@ -128,7 +129,33 @@ def speak(request):
 
 @csrf_exempt
 def predict(request):
-    return scaffold_response(request, {"POST": "predict"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        payload = read_json_object(request)
+        now, activity = validate_prediction_request(payload, {'patient_id', 'time', 'activity', 'recent'})
+        patient_id = validate_uuid(payload['patient_id'], 'patient_id')
+        patient = Profile.objects.get(pk=patient_id, role=Profile.Role.PATIENT)
+        bucket = time_bucket(now, patient.timezone)
+        try:
+            events = recent_spoken(patient)
+        except DatabaseError:
+            events = []  # Unavailable history still yields six defaults.
+        phrases, source = predict_phrases(events, activity, bucket, now)
+        # Attribution needs a saved record, so a failed save is not a success.
+        record = PredictionRecord.objects.create(
+            patient=patient, activity=activity, time_bucket=bucket, phrases=phrases, source=source,
+        )
+        return JsonResponse({
+            'prediction_id': str(record.pk), 'phrases': phrases, 'source': source, 'artifact_version': None,
+        })
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    except Profile.DoesNotExist:
+        return error_response('not_found', 'Patient not found.', 404)
+    except DatabaseError:
+        return error_response('unavailable', 'Prediction storage is unavailable.', 503)
 
 
 def save_event(data):
@@ -253,7 +280,21 @@ def legacy_speak(request):
 
 @csrf_exempt
 def legacy_predict(request):
-    return scaffold_response(request, {"POST": "legacyPredict"})
+    response = check_method(request, ('POST',))
+    if response is not None:
+        return response
+    try:
+        now, activity = validate_prediction_request(read_json_object(request), {'time', 'activity', 'recent'})
+    except InvalidRequest as error:
+        return error_response('invalid_request', str(error), 400)
+    # The legacy contract has no error for missing setup or storage: fall back to defaults.
+    try:
+        patient = Profile.objects.get(pk=settings.LEGACY_DEMO_PATIENT_ID, role=Profile.Role.PATIENT)
+        events, bucket = recent_spoken(patient), time_bucket(now, patient.timezone)
+    except (Profile.DoesNotExist, DatabaseError):
+        events, bucket = [], None
+    phrases, _ = predict_phrases(events, activity, bucket, now)
+    return JsonResponse({'phrases': phrases})
 
 
 @csrf_exempt

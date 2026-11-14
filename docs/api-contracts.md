@@ -10,11 +10,12 @@
 | Shared transport/value helpers | Implemented and tested; used by the profile routes |
 | Profile routes (6 operations) | Implemented: SQLite persistence, field/query/cursor validation, role scoping, 503 on storage failure |
 | Event history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events`, `POST /api/log` | Implemented: SQLite persistence, retry safety, prediction attribution checks |
-| Speech, prediction, learning and legacy speak/predict (13 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
+| Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults; no cloud access |
+| Speech, learning and legacy speak (11 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Message contract documented; consumer not implemented |
 | Conversation Mode/topic timeline | Stretch design only; no endpoint contract yet |
 
-The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** are implemented; prediction, audio synthesis and AI integration are not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
+The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** and deterministic predictions are implemented; audio synthesis and AI integration are not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
 ### Profile operations (implemented)
 
@@ -32,12 +33,24 @@ The **contract/documentation layer, HTTP route scaffolds, profile operations and
 - `GET /api/aac/patients/{id}/events` returns newest first by `(timestamp, event_id)` with a signed cursor bound to the patient; 404 for unknown/caregiver IDs.
 - `POST /api/log` keeps its legacy request shape and returns `200 {"ok": true}`. It saves a spoken event for `LEGACY_DEMO_PATIENT_ID` with fresh server IDs. No retry safety: repeated calls add repeated speech. 503 when storage is unavailable or the demo patient is not seeded.
 - **Schema change (additive):** `Event.input_source` is now nullable. It is `null` only for events saved through `/api/log`, which carries no input source.
-- `PredictionRecord` exists for attribution only; nothing creates prediction records until Phase 4, so attributed events currently 404 outside tests.
+- `POST /api/aac/predict` creates the `PredictionRecord` that attributed events reference.
 - Deleting a patient also deletes their events and prediction records.
+
+### Predictions (implemented)
+
+Ranking lives in `backend/aac/predictions.py` and needs no network access.
+
+- Evidence is the patient's confirmed `spoken` events only (latest 1,000); selections, feedback, displayed suggestions and `recent` are not evidence. Other patients' history is never used.
+- Each event adds `0.5 ** (max(0, age_days) / 7)` to its phrase, with age measured from the request `time`. Phrases merge after trim/case-fold; the newest spelling is shown.
+- Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
+- Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
+- `source` is `history` when any phrase came from history, otherwise `default`. `artifact_version` is always null for now.
+- `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
+- `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 
 ### Scaffold operations
 
-Current behavior of the 13 remaining business operations:
+Current behavior of the 11 remaining business operations:
 
 - Expected methods with an acceptable transport return `501 { "error": { "code": "not_implemented", "message": "<operationId> is scaffolded; feature implementation is pending." } }`, with `Cache-Control: no-store`.
 - POST/PATCH require `Content-Type: application/json` and a UTF-8 JSON object no larger than 64 KiB; invalid bodies (including non-finite numbers) return JSON 400. Field/query/schema/relationship validation on business routes is **not implemented**; even `{}` reaches 501. Reusable value validators and parsed-body access now exist for upcoming feature handlers; scaffolds do not apply them.
@@ -149,7 +162,7 @@ python manage.py check
 python manage.py test
 ```
 
-Runtime tests cover dotenv precedence, paths, invalid configuration, allowed hosts and restricted CORS/preflight. Shared-helper tests cover required/unknown fields, strict strings/UUIDs/integers, offset timestamps/UTC overflow, IANA timezones, bounded query limits, transport size boundaries and safe error envelopes via a test-only view. Contract tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise the 13 remaining scaffolds with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. Profile tests use the migrated test database and validate responses against the OpenAPI schemas, plus validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`; runtime tests cover valid and invalid `LEGACY_DEMO_PATIENT_ID`. Event tests cover retries, conflicts, attribution scope and exact text, validation, time buckets, pagination/cursors, legacy log, cascade deletion, 503 handling and seeded history. Test validators are development dependencies only.
+Runtime tests cover dotenv precedence, paths, invalid configuration, allowed hosts and restricted CORS/preflight. Shared-helper tests cover required/unknown fields, strict strings/UUIDs/integers, offset timestamps/UTC overflow, IANA timezones, bounded query limits, transport size boundaries and safe error envelopes via a test-only view. Contract tests validate OpenAPI 3.1, every explicit JSON example, refs, unique operation IDs, path parameters, invalid event/review payloads, legacy field shapes, six-phrase constraints, documentation routes, schema export and offline asset discovery. Route tests exercise the 11 remaining scaffolds with documented example bodies, validate actual 501 envelopes, verify method/CSRF behavior, JSON transport errors and request size limits, and forbid database access. Profile tests use the migrated test database and validate responses against the OpenAPI schemas, plus validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`; runtime tests cover valid and invalid `LEGACY_DEMO_PATIENT_ID`. Event tests cover retries, conflicts, attribution scope and exact text, validation, time buckets, pagination/cursors, legacy log, cascade deletion, 503 handling and seeded history. Prediction tests cover defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, the event attribution round trip and fallbacks. Test validators are development dependencies only.
 
 Swagger UI 5.31.0 assets are vendored with Apache-2.0 LICENSE/NOTICE; see [`vendor/README.md`](../backend/aac/static/aac/vendor/swagger-ui/README.md). The UI uses no CDN and disables the online validator/query overrides. On a server with `DEBUG=False`, collect static files and have Caddy serve the collected static directory; this deployment configuration remains future work.
 
@@ -158,7 +171,7 @@ Swagger UI 5.31.0 assets are vendored with Apache-2.0 LICENSE/NOTICE; see [`vend
 Use [mvp-phase-plan.md](mvp-phase-plan.md) for the detailed sequence, dependencies, core/optional priorities, endpoint ownership, parallel workstreams and acceptance checks. Summary:
 
 1. ~~Profiles, SQLite models/migrations, and validation shared by plain function views.~~ Backend done; frontend use pending.
-2. ~~Idempotent event recording~~ (done) and deterministic time-decayed predictions with contract tests.
+2. ~~Idempotent event recording and deterministic time-decayed predictions with contract tests.~~ Done.
 3. Speech generation/playback integration and existing input relay.
 4. Caregiver label creation/assignment/review.
 5. Optional bounded AI analysis/Jev integration; Conversation Mode only after the core demo and benchmarks.

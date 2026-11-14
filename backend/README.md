@@ -2,9 +2,9 @@
 
 Django project: `config`. Application: `aac` (augmentative and alternative communication).
 
-**Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution.
+**Implemented:** runtime environment loading, SQLite/media/static path settings, local allowed hosts, restricted development CORS, reusable transport/value validators, OpenAPI contracts and offline Swagger UI, the six profile operations (caregiver/patient models, setup/preferences validation, caregiver-scoped patient pagination, the `seed_demo` command), and Phase 3 communication history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events` and legacy `POST /api/log`, with `CommunicationEvent` and a minimal `PredictionRecord` for attribution, and Phase 4 deterministic predictions: `POST /api/aac/predict` and legacy `POST /api/predict`.
 
-**Still scaffolded:** the other 13 HTTP business operations (speech, prediction, learning, legacy speak/predict) return JSON 501. Nothing creates `PredictionRecord` rows yet; Phase 4 prediction will. Channels/WebSocket relay, AWS integrations and casting are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
+**Still scaffolded:** the other 11 HTTP business operations (speech, learning, legacy speak) return JSON 501. Channels/WebSocket relay, AWS integrations and casting are not implemented. No frontend uses the profile routes yet and there is no patient switching, so Phase 2 is not complete end to end. The ASGI entrypoint currently serves HTTP only; Channels/Daphne arrive with input relay work.
 
 Follow the consolidated [MVP implementation plan](../docs/mvp-phase-plan.md), [API contracts/status](../docs/api-contracts.md) and [data outline](../docs/data-outline.md).
 
@@ -35,7 +35,9 @@ The server runs on `http://localhost:8000`:
 - `POST /api/aac/events`: saves a selection, spoken or feedback event. New event 201; identical retry (same `event_id`, same normalized content) 200; changed retry, a second spoken event for one utterance, or an utterance reused for another patient 409; unknown patient or prediction 404; text that does not match the referenced prediction candidate 400; storage failure 503.
 - `GET /api/aac/patients/{id}/events`: newest first, `limit` and signed `cursor` like the patient list.
 - `POST /api/log`: unchanged legacy shape; saves a spoken event for `LEGACY_DEMO_PATIENT_ID` and returns `{"ok": true}`. No retry safety; 503 if the demo patient has not been seeded.
-- Other `/api/aac/*`, `/api/learn/*`, and legacy speak/predict routes: JSON 501, with 400 for malformed JSON transport and 405 for wrong methods.
+- `POST /api/aac/predict`: six phrases ranked from the patient's confirmed spoken history, saved as a `PredictionRecord` whose ID the client sends back on attributed events. 404 unknown patient; 503 only if the record cannot be saved (unreadable history falls back to defaults).
+- `POST /api/predict`: same ranking for `LEGACY_DEMO_PATIENT_ID`, legacy `{"phrases": [...]}` shape, no saved record. Always 200 for a valid request; defaults if the demo patient is missing or storage fails.
+- Other `/api/aac/*`, `/api/learn/*`, and legacy speak routes: JSON 501, with 400 for malformed JSON transport and 405 for wrong methods.
 - `/`: 404 expected.
 
 The generated admin route remains; no application authentication has been added. Migrations create Django's internal tables plus `Profile`, `CaregiverPatient` (0001), `PredictionRecord` and `CommunicationEvent` (0002). Each event stores a patient-local `time_bucket` (`night` 0–5, `morning` 5–11, `midday` 11–14, `afternoon` 14–17, `evening` 17–21, `night` 21–24, defined in `aac/history.py`) computed from the patient's timezone when it is saved. Role-specific setup and link roles are checked by model validation on every `save()`; SQLite check constraints back the per-row rules, but bulk ORM writes skip the cross-row caregiver/patient role check. SQLite is also the chosen application store on UNO Q; no DynamoDB or second database.
@@ -67,7 +69,7 @@ This is an unauthenticated trusted-local-network demo, not a public deployment. 
 
 Future plain views should check methods first, parse JSON, call explicit field validators and catch `InvalidRequest`, returning `error_response('invalid_request', str(error), 400)`. Validators do not echo submitted values. Record existence, roles/ownership, preferences, cursor decoding and other feature-specific rules still belong to their implementation slices. These are small functions, not automatic OpenAPI validation or a new schema framework.
 
-Profile views use these helpers plus `profile_validation.py` (patient setup/preferences) and `profiles.py` (serialization and signed, caregiver-scoped keyset cursors). Event views use `history.py` (event validation, retry comparison, time buckets, serialization and patient-scoped cursors). The 13 remaining scaffolds still validate transport only and return 501 even for `{}` or invalid field/query values.
+Profile views use these helpers plus `profile_validation.py` (patient setup/preferences) and `profiles.py` (serialization and signed, caregiver-scoped keyset cursors). Event views use `history.py` (event validation, retry comparison, time buckets, serialization and patient-scoped cursors). Prediction views use `predictions.py` (request validation, ranking tiers, decay weights, tie ordering and curated defaults). The 11 remaining scaffolds still validate transport only and return 501 even for `{}` or invalid field/query values.
 
 ## Checks and tests
 
@@ -78,7 +80,7 @@ python manage.py test
 python manage.py export_openapi > /tmp/aac-openapi.json
 ```
 
-Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 13 remaining scaffolds, the profile feature and event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history). Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
+Tests cover isolated runtime settings/dotenv precedence (including `LEGACY_DEMO_PATIENT_ID`), paths, invalid configuration, allowed hosts, browser preflight/origin restrictions, value validators, parsed JSON access and helper composition in a test-only plain view, contracts/examples, offline documentation assets, the 11 remaining scaffolds, the profile feature, event history (retries, conflicts, attribution, pagination, legacy log, cascade deletion, seeded history) and predictions (defaults, decay, context tiers, case-insensitive merging, deterministic ties, patient isolation, attribution round trip, fallbacks). Profile tests run against Django's migrated test database: response schemas, validation, role scoping, pagination/cursors, deletion, atomic rollback, 503 handling, database constraints and `seed_demo`. Configuration tests substitute a temporary dotenv file and a cleared environment rather than reading a developer's secrets. No AWS or device is required.
 
 Manual HTTP smoke checks after starting Django:
 
@@ -103,6 +105,8 @@ Profile-slice verification: `manage.py check`, all 64 tests and `makemigrations 
 
 Event-history verification: `manage.py check`, all 79 tests and `makemigrations --check` passed. Manual smoke test on a temporary database: seed, event 201 → identical retry 200 → changed retry 409, `/api/log` 200, then a restart with all 22 events still listed newest first.
 
+Prediction verification: all 93 tests passed. Manual smoke test on a seeded temporary database returned activity-appropriate suggestions (breakfast, lunch, bedtime), time-of-day history for an unknown activity, and the legacy shape.
+
 ## Layout
 
 ```text
@@ -124,7 +128,7 @@ aac/
   validation.py             Explicit value/field/query helpers; no ORM access
   consumers.py, routing.py  Future WebSocket relay
   speech.py                 Future Polly integration
-  predictions.py            Future ranking and Bedrock integration
+  predictions.py            Deterministic ranking and defaults (Bedrock later)
   casting.py                Future optional Google Home integration
   management/commands/      Schema export and seed_demo
   migrations/               Application migrations (0001 profiles, 0002 history)
@@ -133,4 +137,4 @@ seed/                       Synthetic demo history loaded by seed_demo
 media/audio/                Ignored generated audio
 ```
 
-Add Channels/Daphne, boto3 and optional casting dependencies when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 4 deterministic predictions (`/api/aac/predict`, legacy `/api/predict`), creating `PredictionRecord` rows and ranking from this history.
+Add Channels/Daphne, boto3 and optional casting dependencies when their integrations are implemented, not for empty placeholders. Next backend slice: Phase 5 Polly speech (`/api/aac/speak`, legacy `/api/speak`).

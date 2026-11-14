@@ -15,7 +15,7 @@ Caregiver sets up a patient
 
 UNO R4 WiFi handles buttons; UNO Q 4GB hosts Django and SQLite. Keyboard fallback is always Space = NEXT, Enter = SELECT. No touchscreen or touch sensor is required.
 
-**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Phase 2's backend is implemented: the six profile operations, `Profile`/`CaregiverPatient` models and migration, and `seed_demo`. Phase 3's backend is implemented: event recording, patient history, legacy `/api/log`, `CommunicationEvent`/`PredictionRecord` and seeded spoken history. The other 13 business operations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
+**Already complete:** OpenAPI 3.1 contracts, offline Swagger UI, and 22 HTTP business-operation scaffolds with transport checks and explicit JSON 501 responses. Phase 1's backend runtime slice now provides `.env` loading, configurable SQLite/media/static paths, public backend URL, local allowed hosts and restricted development CORS, with configuration/preflight tests. Shared transport helpers now expose parsed JSON, and tested value validators cover fields, strings, UUIDs, timestamps/timezones, integers and page limits. Documentation endpoints work. Phase 2's backend is implemented: the six profile operations, `Profile`/`CaregiverPatient` models and migration, and `seed_demo`. Phase 3's backend is implemented: event recording, patient history, legacy `/api/log`, `CommunicationEvent`/`PredictionRecord` and seeded spoken history. Phase 4's deterministic predictions (new and legacy routes) are implemented. The other 11 business operations, frontend, and WebSocket relay are not implemented. Transcription benchmarking is a separate parallel workstream; its presence is not proof of target-device performance.
 
 References:
 
@@ -94,7 +94,7 @@ These are modules, not new services or mandatory abstractions. Create files only
 | 1 | Runtime configuration, validation, frontend shell | 0 | Core |
 | 2 | Profiles and patient setup | 1 | Core; backend done, frontend pending |
 | 3 | SQLite event history and retry safety | 2 | Core; backend done |
-| 4 | Deterministic predictions | 3 | Core |
+| 4 | Deterministic predictions | 3 | Core; backend done |
 | 5 | Speech and first keyboard-driven demo loop | 2–4 | Core |
 | 6 | R4 WiFi buttons and WebSocket relay | 1; integrate with 5 | Core; build in parallel |
 | 7 | Fixed/custom labels and caregiver review | 2–3; connect to 4 | Next agreed product workflow |
@@ -162,6 +162,8 @@ Implement `/api/log` using the fixed demo patient and the same persistence logic
 **Done when:** identical event retry returns 200 without duplication, new event returns 201, changed retry/conflicting second spoken event returns 409, and intentional repeated speech with new IDs is preserved. UTC timestamps and patient-local time buckets are correct. Cross-patient data is isolated; history survives restart; selection/feedback is not counted as completed speech.
 
 ## Phase 4 — Deterministic predictions
+
+**Status:** implemented and tested; see [api-contracts.md](api-contracts.md#predictions-implemented). The "done when" items are covered by automated tests. `/api/aac/predict` gained an additive 503 for a failed prediction-record save. Displaying suggestions in the frontend remains with the frontend lane.
 
 **Operations (2):** `POST /api/aac/predict`, `POST /api/predict`.
 
@@ -319,4 +321,4 @@ Run separate manual smoke tests against real Polly, Bedrock and optional Google 
 - **Benchmark lane:** Codex works only in its assigned transcription benchmark directory; findings inform S1, not core database/API work.
 - Every handoff identifies changed operations, examples to run in Swagger, tests/manual checks completed, dependency/config additions and remaining scaffolds. Do not claim a feature is complete because its endpoint exists.
 
-**Next concrete backend task:** Phase 4 deterministic predictions: create `PredictionRecord` rows and rank from Phase 3 history using the time buckets in `aac/history.py`. Profile and event-history backends are implemented; finish the Phase 1 frontend shell, Phase 2 frontend patient setup, and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.
+**Next concrete backend task:** Phase 5 Polly speech (`/api/aac/speak`, `/api/speak`); it needs AWS credentials in `backend/.env`. Profile, event-history and prediction backends are implemented; finish the Phase 1 frontend shell, Phase 2 frontend patient setup, and hardware/input setup in parallel. Do not start with AI analysis or Conversation Mode.

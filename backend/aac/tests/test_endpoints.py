@@ -61,7 +61,7 @@ class EndpointScaffoldTests(SimpleTestCase):
                     )
                     Draft202012Validator(self.error_schema).validate(response.json())
                 count += 1
-        self.assertEqual(count, 13)
+        self.assertEqual(count, 11)
 
     def test_methods_options_and_head(self):
         for path, methods in self.routes():
@@ -118,7 +118,7 @@ class EndpointScaffoldTests(SimpleTestCase):
 
     def test_body_limit_returns_json_error(self):
         response = self.client.post(
-            "/api/aac/predict",
+            "/api/aac/speak",
             json.dumps({"text": "x" * MAX_JSON_BYTES}),
             content_type="application/json",
         )
@@ -130,7 +130,7 @@ class EndpointScaffoldTests(SimpleTestCase):
         # rather than assuming a particular nesting depth always raises.
         with patch("aac.http.json.loads", side_effect=RecursionError):
             response = self.client.post(
-                "/api/aac/predict", "{}", content_type="application/json"
+                "/api/aac/speak", "{}", content_type="application/json"
             )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_request")
@@ -138,7 +138,7 @@ class EndpointScaffoldTests(SimpleTestCase):
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=10)
     def test_django_body_limit_returns_json_not_html(self):
         response = self.client.post(
-            "/api/aac/predict", {"text": "long enough"}, content_type="application/json"
+            "/api/aac/speak", {"text": "long enough"}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "invalid_request")
@@ -147,7 +147,7 @@ class EndpointScaffoldTests(SimpleTestCase):
         # Syntactically valid objects reach the scaffold, even with missing fields.
         # Field/query and ownership checks belong to the later feature handlers.
         response = self.client.post(
-            "/api/aac/predict", {}, content_type="application/json"
+            "/api/aac/speak", {}, content_type="application/json"
         )
         self.assertEqual(response.status_code, 501)
         response = self.client.get(
