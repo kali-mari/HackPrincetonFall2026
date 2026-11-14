@@ -1,0 +1,87 @@
+/* Smart AAC Board design tokens. Contrast ratios verified; see DESIGN.md. */
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+
+:root {
+  /* Board surfaces */
+  --color-page: #ffffff;
+  --color-ink: #000000;
+
+  /* Error banner: white on red is 7.3:1 */
+  --color-error: #b00020;
+  --color-on-error: #ffffff;
+
+  /* Switch connection dot (shape differs too: filled when on, hollow when off) */
+  --status-on: #1a7f37;
+  --status-off: #6b7280;
+  --status-dot-size: 16px;
+  --caregiver-target: 48px; /* adult tap target on the board, above the 44px minimum */
+
+  /* Modified Fitzgerald Key tile fills (black text >= 14:1 on all) */
+  --tile-people: #fff3a3;   /* people & pronouns: yellow */
+  --tile-verb: #c9f2c2;     /* verbs: green */
+  --tile-describe: #c9e2ff; /* describing words: blue */
+  --tile-noun: #ffd8a8;     /* nouns: orange */
+  --tile-social: #ffd4ea;   /* social words: pink */
+  --tile-negation: #ffc8c2; /* negation: red */
+  --tile-border: #000000;
+  --tile-border-width: 2px;
+
+  /* Scanning highlight: violet is outside the Fitzgerald set */
+  --scan-color: #5b00d6;
+  --scan-outline-width: 6px;
+  --scan-outline-offset: -6px; /* drawn inside the box: edge rows touch the screen edge (LAYOUT.md) */
+  --scan-outline: var(--scan-outline-width) solid var(--scan-color);
+  --scan-scale: 1.04;
+
+  /* Typography */
+  --font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-bold: 700;
+  --font-size-tile: 24px;
+  --font-size-prediction: 28px;
+  --font-size-strip: 40px;
+  --font-size-body: 18px;
+  --font-size-heading: 32px;
+  --line-height-tight: 1.2;
+  --line-height-body: 1.5;
+
+  /* 8px spacing grid */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
+  --space-8: 64px;
+
+  /* Board layout (LAYOUT.md) */
+  --board-width: 1280px;
+  --board-height: 800px;
+  --tab-column-width: 160px;
+  --tile-min-size: 120px; /* exact fit: 6 bands of 120 + 16px gaps = 800px (see LAYOUT.md) */
+  --tile-gap: 16px;
+  --tile-radius: 16px;
+  --tile-symbol-size: 64px;
+  --strip-min-height: 120px;
+
+  /* Caregiver dashboard: calm slate + teal */
+  --cg-bg: #f6f8fa;
+  --cg-surface: #ffffff;
+  --cg-text: #1e293b;
+  --cg-text-muted: #475569;
+  --cg-border: #94a3b8;
+  --cg-accent: #0f5257;
+  --cg-on-accent: #ffffff;
+  --cg-radius: 8px;
+  --cg-dialog-width: 480px;
+
+  /* Motion: the only transition in the app */
+  --motion-highlight-duration: 120ms;
+  --motion-highlight-easing: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-highlight-duration: 0ms;
+    --scan-scale: 1;
+  }
+}

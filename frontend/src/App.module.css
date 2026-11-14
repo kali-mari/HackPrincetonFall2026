@@ -1,0 +1,239 @@
+/* Geometry is LAYOUT.md: 6 bands of 120px with 16px gaps = 800px tall; 160px tab column + 8 tile columns = 1248px wide. */
+
+.viewport {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* Centered and scaled as one fixed-size piece, so a smaller window never moves anything. */
+.board {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--board-width);
+  height: var(--board-height);
+  padding-inline: var(--space-2);
+  display: grid;
+  grid-template-columns: var(--tab-column-width) repeat(8, var(--tile-min-size));
+  grid-template-rows: repeat(6, var(--tile-min-size));
+  gap: var(--tile-gap);
+}
+
+.strip {
+  grid-column: 1 / 5;
+  justify-content: flex-start;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-size-strip);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  text-align: start;
+}
+
+/* Caregiver cell above grid column 4: gear + room for the /f5 clock, then the connection dot. */
+.status {
+  grid-column: 5 / 6;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--space-1);
+}
+
+.statusTools {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.gear {
+  width: var(--caregiver-target);
+  height: var(--caregiver-target);
+  border-radius: var(--cg-radius);
+}
+
+.gear svg {
+  width: var(--space-4);
+  height: var(--space-4);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  min-height: var(--space-4);
+  font-weight: var(--font-weight-bold);
+}
+
+.dotOn,
+.dotOff {
+  width: var(--status-dot-size);
+  height: var(--status-dot-size);
+  border-radius: 50%;
+  flex: none;
+}
+
+.dotOn {
+  background: var(--status-on);
+}
+
+.dotOff {
+  border: calc(var(--status-dot-size) / 8) solid var(--status-off);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Settings dialog: caregiver palette, smaller type than the child's board. */
+.settings {
+  width: var(--cg-dialog-width);
+  padding: var(--space-4);
+  border: 1px solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background: var(--cg-surface);
+  color: var(--cg-text);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.settings::backdrop {
+  background: color-mix(in srgb, var(--color-ink) 50%, transparent);
+}
+
+.settings h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-tile);
+}
+
+.settings p {
+  margin: 0 0 var(--space-3);
+  color: var(--cg-text-muted);
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--caregiver-target);
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+}
+
+.source input {
+  width: var(--space-3);
+  height: var(--space-3);
+  margin: 0;
+  accent-color: var(--cg-accent);
+}
+
+.source span {
+  display: flex;
+  flex-direction: column;
+}
+
+.source span span {
+  color: var(--cg-text-muted);
+}
+
+.close {
+  width: 100%;
+  height: var(--caregiver-target);
+  margin-top: var(--space-3);
+  border: none;
+  border-radius: var(--cg-radius);
+  background: var(--cg-accent);
+  color: var(--cg-on-accent);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-bold);
+}
+
+.speak {
+  grid-column: 6 / 8;
+  gap: var(--space-2);
+  background: var(--color-ink);
+  color: var(--color-page);
+  font-size: var(--font-size-heading);
+}
+
+.spinner {
+  width: var(--space-4);
+  height: var(--space-4);
+  border: var(--space-1) solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* Floats over the prediction row so nothing on the board moves; taps pass through it. */
+.error {
+  position: absolute;
+  top: calc(var(--tile-min-size) + var(--tile-gap));
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--tile-radius);
+  background: var(--color-error);
+  color: var(--color-on-error);
+  font-size: var(--font-size-prediction);
+  font-weight: var(--font-weight-bold);
+  pointer-events: none;
+}
+
+.predictions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--tile-gap);
+}
+
+.prediction {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-prediction);
+  line-height: var(--line-height-tight);
+}
+
+.tabs {
+  grid-row: 3 / -1;
+  display: grid;
+  grid-template-rows: repeat(4, var(--tile-min-size));
+  gap: var(--tile-gap);
+}
+
+.tab {
+  padding: var(--space-1);
+  line-height: var(--line-height-tight);
+}
+
+.tab[aria-pressed='true'] {
+  font-weight: var(--font-weight-bold);
+  box-shadow: inset calc(-1 * var(--space-1)) 0 0 var(--color-ink);
+}
+
+.grid {
+  grid-column: 2 / -1;
+  grid-row: 3 / -1;
+  display: grid;
+  grid-template-columns: repeat(8, var(--tile-min-size));
+  grid-template-rows: repeat(4, var(--tile-min-size));
+  gap: var(--tile-gap);
+}
