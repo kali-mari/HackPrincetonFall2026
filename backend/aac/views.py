@@ -130,11 +130,20 @@ BROWSER_START_SECONDS = 1.5  # response to the frontend, then audio starting
 SPEAKER_START_SECONDS = 4  # Google Home connecting and buffering
 
 
-def speech_response(text, voice_id):
+def read_prefetch(payload):
+    prefetch = payload.get('prefetch', False)
+    if not isinstance(prefetch, bool):
+        raise InvalidRequest('prefetch must be true or false.')
+    return prefetch
+
+
+def speech_response(text, voice_id, prefetch=False):
     try:
         url = synthesize(text, voice_id)
     except SpeechUnavailable as error:
         return error_response('unavailable', str(error), 503)
+    if prefetch:  # made or reused for later; nothing plays now
+        return JsonResponse({'audio_url': url})
     cast = cast_audio(url)  # Background and optional; never changes the response.
     # Listen mode hears silence while the clip plays, so the board's own voice is not
     # transcribed. The margin covers the frontend (or the Google Home) starting playback.
@@ -149,9 +158,10 @@ def speak(request):
         return response
     try:
         payload = read_json_object(request)
-        validate_fields(payload, allowed={'patient_id', 'text'}, required={'patient_id', 'text'})
+        validate_fields(payload, allowed={'patient_id', 'text', 'prefetch'}, required={'patient_id', 'text'})
         patient_id = validate_uuid(payload['patient_id'], 'patient_id')
         text = validate_string(payload['text'], 'text', max_length=500)
+        prefetch = read_prefetch(payload)
         patient = Profile.objects.get(pk=patient_id, role=Profile.Role.PATIENT)
     except InvalidRequest as error:
         return error_response('invalid_request', str(error), 400)
@@ -159,7 +169,7 @@ def speak(request):
         return error_response('not_found', 'Patient not found.', 404)
     except DatabaseError:
         return error_response('unavailable', 'Profile storage is unavailable.', 503)
-    return speech_response(text, patient.preferences.get('voice_id'))
+    return speech_response(text, patient.preferences.get('voice_id'), prefetch)
 
 
 @csrf_exempt
@@ -318,8 +328,9 @@ def legacy_speak(request):
         return response
     try:
         payload = read_json_object(request)
-        validate_fields(payload, allowed={'text'}, required={'text'})
+        validate_fields(payload, allowed={'text', 'prefetch'}, required={'text'})
         text = validate_string(payload['text'], 'text', max_length=500)
+        prefetch = read_prefetch(payload)
     except InvalidRequest as error:
         return error_response('invalid_request', str(error), 400)
     # Speech does not need the demo patient; use its voice only when available.
@@ -328,7 +339,7 @@ def legacy_speak(request):
         voice_id = patient.preferences.get('voice_id')
     except (Profile.DoesNotExist, DatabaseError):
         voice_id = None
-    return speech_response(text, voice_id)
+    return speech_response(text, voice_id, prefetch)
 
 
 @csrf_exempt

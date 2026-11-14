@@ -14,7 +14,7 @@ This is a 36 hour hackathon build. The demo path comes first. Keep code simple: 
 
 Backend runs on `http://localhost:8000`.
 
-- `POST /api/speak` body `{ "text": string }` returns `{ "audio_url": string }`. Also casts the audio to the Google Home if one is configured.
+- `POST /api/speak` body `{ "text": string, "prefetch"?: boolean }` returns `{ "audio_url": string }`. Also casts the audio to the Google Home if one is configured, and blanks listen mode's microphone while the clip plays. With `"prefetch": true` it only makes or reuses the cached clip: no cast, no listen pause.
 - `POST /api/predict` body `{ "time": ISO string, "activity": string, "recent": string[] }` returns `{ "phrases": string[] }` with exactly 6 phrases.
 - `POST /api/log` body `{ "text": string, "timestamp": ISO string }` records a spoken sentence to DynamoDB.
 - `WS /ws/input/` pushes `{ "action": "PREV" | "NEXT" | "SELECT" | "DELETE" | "SPEAK" | "LISTEN", "source": "button" | "touch" | "voice" }` to the frontend. `voice` and `touch` always carry `SELECT`. `LISTEN` toggles caregiver listen mode (speech-to-text). The bridge sends to the same socket; the consumer broadcasts to a single Channels group, `input`.

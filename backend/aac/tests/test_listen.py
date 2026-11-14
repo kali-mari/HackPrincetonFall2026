@@ -8,11 +8,13 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
 from channels.testing import WebsocketCommunicator
+from jsonschema import Draft202012Validator
 from django.test import SimpleTestCase, override_settings
 
 from aac import consumers, listen
 from aac.consumers import ConversationConsumer
 from aac.listen import Listener, capture_command
+from aac.openapi import SCHEMAS
 from aac.transcription import TranscriptionUnavailable
 from config.asgi import application
 
@@ -202,6 +204,19 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         for ws in self.open:
             await ws.disconnect()
 
+    async def asyncSetUp(self):
+        validator = Draft202012Validator(SCHEMAS['ConversationServerMessage'])
+        sent = WebsocketCommunicator.receive_json_from
+
+        async def checked(communicator, timeout=1):  # every server message matches OpenAPI
+            message = await sent(communicator, timeout)
+            validator.validate(message)
+            return message
+
+        patcher = patch.object(WebsocketCommunicator, 'receive_json_from', checked)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def connect(self, headers=BROWSER):
         ws = WebsocketCommunicator(application, '/ws/conversation/', headers=list(headers))
         connected, _ = await ws.connect()
@@ -211,6 +226,7 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         return ws, connected
 
     async def start(self, ws):
+        Draft202012Validator(SCHEMAS['ConversationClientMessage']).validate({'type': 'start'})
         await ws.send_json_to({'type': 'start'})
         self.assertEqual(await ws.receive_json_from(), {'type': 'state', 'listening': True})
         return FakeListener.instances[-1]

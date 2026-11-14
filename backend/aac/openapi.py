@@ -48,6 +48,11 @@ CONFIDENCE = nullable({"type": "number", "minimum": 0, "maximum": 1})
 CATEGORY = enum("intent", "topic", "activity")
 TEXT = text(500, pattern=r"\S")
 PHRASES = array(TEXT, minItems=6, maxItems=6, uniqueItems=True)
+PREFETCH = {
+    "type": "boolean",
+    "default": False,
+    "description": "true: make or reuse the clip and return its URL without playing it anywhere (no Google Home cast, no listen-mode pause). Missing or false: speak now, as before. Useful only with SPEECH_CACHE on, which is the default.",
+}
 PAGE_PARAMETERS = [
     {
         "name": "limit",
@@ -188,8 +193,10 @@ SCHEMAS = {
             "updated_at",
         ),
     ),
-    "LegacySpeakRequest": obj({"text": TEXT}, ("text",)),
-    "SpeakRequest": obj({"patient_id": UUID, "text": TEXT}, ("patient_id", "text")),
+    "LegacySpeakRequest": obj({"text": TEXT, "prefetch": PREFETCH}, ("text",)),
+    "SpeakRequest": obj(
+        {"patient_id": UUID, "text": TEXT, "prefetch": PREFETCH}, ("patient_id", "text")
+    ),
     "SpeakResponse": obj(
         {"audio_url": {"type": "string", "format": "uri"}}, ("audio_url",)
     ),
@@ -430,6 +437,22 @@ SCHEMAS = {
         },
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
+    "ConversationClientMessage": obj(
+        {"type": enum("start", "stop")},
+        ("type",),
+        description="WS /ws/conversation/ client message: start or stop caregiver listen mode.",
+    ),
+    "ConversationServerMessage": {
+        "oneOf": [
+            obj({"type": enum("state"), "listening": {"type": "boolean"}}, ("type", "listening")),
+            obj(
+                {"type": enum("transcript"), "seq": {"type": "integer", "minimum": 1}, "text": {"type": "string", "minLength": 1}},
+                ("type", "seq", "text"),
+            ),
+            obj({"type": enum("error"), "message": {"type": "string", "minLength": 1}}, ("type", "message")),
+        ],
+        "description": "WS /ws/conversation/ server message: listening state, one finished phrase (seq counts from 1 per connection), or a safe error message.",
+    },
     "InputMessage": obj(
         {
             "action": enum("PREV", "NEXT", "SELECT", "DELETE", "SPEAK", "LISTEN"),
@@ -698,7 +721,7 @@ def build_openapi():
     )
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
-    speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
+    speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. While the clip plays, listen mode (WS /ws/conversation/) hears silence: the microphone is blanked for the clip's length plus 1.5 s (4 s when casting). With prefetch true, the clip is only made or reused: no cast and no listen pause, same response shape. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
     prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. Optional AI (PREDICT_PROVIDER: openai, anthropic, gemini or bedrock) receives activity, time bucket, recent and the history-ranked phrases as data. AI wait over two seconds (PREDICT_TIMEOUT_SECONDS), failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
     add(
         "/api/speak",
@@ -1081,7 +1104,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log, deterministic predictions and speech (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining learning routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation, six profile operations, event recording/history, legacy /api/log, deterministic predictions and speech (new and legacy) are implemented with SQLite persistence and field/relationship validation. Remaining learning routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Caregiver listen mode is WS /ws/conversation/ (see x-websocket-conversation), on-device only; the topic timeline is a separate stretch feature, not part of this contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {
@@ -1102,6 +1125,20 @@ def build_openapi():
                 "message": ref("InputMessage"),
                 "example": {"action": "SPEAK", "source": "button"},
                 "description": "Single local active board. Arduino sends plain serial lines at 9600 baud (PREV, NEXT, SELECT, DELETE, SPEAK, LISTEN, VOICE, TOUCH); the bridge maps them to InputMessage (VOICE and TOUCH become SELECT). Space/Enter handled by frontend. No conversation streaming on this group.",
+            },
+            "x-websocket-conversation": {
+                "path": "/ws/conversation/",
+                "status": "implemented",
+                "client_message": ref("ConversationClientMessage"),
+                "server_message": ref("ConversationServerMessage"),
+                "example": [
+                    {"type": "start"},
+                    {"type": "state", "listening": True},
+                    {"type": "transcript", "seq": 1, "text": "Do you want juice?"},
+                    {"type": "stop"},
+                    {"type": "state", "listening": False},
+                ],
+                "description": "Caregiver listen mode, on the device. The backend records the board microphone (LISTEN_DEVICE), cuts phrases with a voice detector and transcribes them (TRANSCRIBE_PROVIDER). One connection listens at a time; closing it stops listening. Transcripts go only to that connection and are never stored or logged. The server sends state listening false on connect; start answers state true once recording (seconds the first time, while models load); stop answers state false. Errors are safe to show and an error while listening is followed by state false. The microphone is blanked while board speech plays (see /api/speak). Browser origins as /ws/input/; clients without Origin are allowed.",
             },
         }
     )

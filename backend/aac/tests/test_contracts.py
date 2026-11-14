@@ -107,7 +107,7 @@ class ContractTests(SimpleTestCase):
 
     def test_legacy_shapes_and_six_phrase_constraint(self):
         expected = {
-            "LegacySpeakRequest": {"text"},
+            "LegacySpeakRequest": {"text", "prefetch"},  # prefetch is optional and additive
             "LegacyPredictRequest": {"time", "activity", "recent"},
             "LegacyLogRequest": {"text", "timestamp"},
             "LegacyPredictResponse": {"phrases"},

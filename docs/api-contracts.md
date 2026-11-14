@@ -11,7 +11,7 @@
 | Profile routes (6 operations) | Implemented: SQLite persistence, field/query/cursor validation, role scoping, 503 on storage failure |
 | Event history: `POST /api/aac/events`, `GET /api/aac/patients/{id}/events`, `POST /api/log` | Implemented: SQLite persistence, retry safety, prediction attribution checks |
 | Predictions: `POST /api/aac/predict`, `POST /api/predict` | Implemented: deterministic history ranking with defaults, plus optional AI (OpenAI, Anthropic, Gemini or Bedrock) with a 2-second fallback |
-| Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting |
+| Speech: `POST /api/aac/speak`, `POST /api/speak` | Implemented: provider-neutral TTS (ElevenLabs), cached MP3s under `/media/audio/`, optional Google Home casting, optional `prefetch`, listen-mode pause while playing |
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | `WS /ws/conversation/` | Implemented: caregiver listen mode. On-device mic capture, voice detection and transcription; numbered phrases to the one connection that started it (`aac/listen.py`, `aac/consumers.py`) |
@@ -59,6 +59,8 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 - `503 unavailable` when the provider is unconfigured (no key or voice), fails or times out, returns empty/oversized audio, or the file cannot be saved. No fake URLs and no provider error text. `/api/aac/speak` returns 404 for an unknown or caregiver patient.
 - Identical provider/model/voice/text reuses the cached file (`SPEECH_CACHE`, default on). `cleanup_audio` removes files unused for 24 hours.
 - Speaking never records an event; the frontend records `spoken` after playback completes.
+- **Prefetch (additive, optional):** both routes accept `"prefetch": true`, for example `{"text": "I want water", "prefetch": true}`. The clip is made, or reused from the cache, and its URL returned in the same `{"audio_url": ...}` shape, but nothing plays: no Google Home cast and no listen-mode pause. Missing or `false` behaves exactly as before. A non-boolean value is 400. Errors are unchanged (503 when speech is unavailable). Use it to prepare the six predicted phrases so a later real Speak reuses the cached clip at once. It only saves time with `SPEECH_CACHE` on (the default); with the cache off every call makes a new file. Each new phrase is one provider request, so prefetch one or two at a time rather than six in parallel, to stay under the provider's concurrency limit.
+- **Listen-mode pause:** a successful non-prefetch speak blanks the listen-mode microphone (`WS /ws/conversation/`) for the clip's length plus 1.5 s, or 4 s when casting, so the board's own voice is not transcribed. The response does not change.
 - With `GOOGLE_HOME_HOST` set, audio is also cast in the background; the response is unaffected and cast failures are only logged. The frontend should not also play audio locally in that mode.
 
 ### Scaffold operations
@@ -206,7 +208,7 @@ Server to client:
 - While the board speaks, listening hears silence. Each successful `POST /api/speak` or `/api/aac/speak` blanks the microphone for the clip's length plus 1.5 s (4 s when casting to the Google Home), so the board's own voice is not transcribed. A phrase in progress ends normally. The frontend's backup voice (browser speech when `/api/speak` fails) does not go through the backend: send `stop` before it and `start` after.
 - Not covered yet: topic detection and conversation suggestions.
 
-The schema includes `InputMessage` and an `x-websocket` extension for `/ws/input/` only. Swagger does not test a WebSocket handshake or streaming behavior.
+The schema includes `InputMessage` and an `x-websocket` extension for `/ws/input/`, and `ConversationClientMessage`, `ConversationServerMessage` and an `x-websocket-conversation` extension for `/ws/conversation/`. Swagger does not test a WebSocket handshake or streaming behavior.
 
 ## Validate and test
 

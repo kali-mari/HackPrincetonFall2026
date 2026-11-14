@@ -159,7 +159,8 @@ ADB binary: `~/Library/Application Support/arduino_applab_workspace/arduino15/da
 3. **Backup voice pause** (frontend): the backend now blanks the mic while its own
    clips play, but the frontend's browser backup voice bypasses the backend; send
    `stop` before it and `start` after.
-4. **Merge PR #4** once it is reviewed.
+4. **Merge PR #4** once it is reviewed. It also adds optional `prefetch` to both speak
+   routes (no cast, no listen pause) for the frontend's prediction prefetch.
 
 ## Pick-up commands
 

@@ -162,6 +162,23 @@ class SpeakEndpointTests(SpeechTestCase):
             self.speak(text=' ')
         pause.assert_not_called()
 
+    def test_prefetch_makes_the_clip_without_playing_it(self):
+        with patch('aac.views.cast_audio') as cast, patch('aac.views.listen.pause') as pause:
+            prefetched = self.ok(self.speak(prefetch=True))
+            cast.assert_not_called()
+            pause.assert_not_called()
+            self.assertEqual(self.ok(self.speak(prefetch=False)), prefetched)  # cache hit
+            cast.assert_called_once_with(prefetched)
+            pause.assert_called_once()
+        self.provider.assert_called_once()
+        self.assertEqual(CommunicationEvent.objects.count(), 0)
+
+    def test_prefetch_must_be_a_boolean(self):
+        for value in ('yes', 1, None, []):
+            with self.subTest(prefetch=value):
+                self.assertEqual(self.speak(prefetch=value).status_code, 400)
+        self.provider.assert_not_called()
+
 
 class LegacySpeakTests(SpeechTestCase):
     def speak(self, payload):
@@ -177,8 +194,21 @@ class LegacySpeakTests(SpeechTestCase):
         self.assertEqual(self.provider.call_args.args[1], 'demo-voice')
 
     def test_legacy_validation(self):
-        for payload in ({}, {'text': ''}, {'text': 'Hi', 'patient_id': str(uuid4())}):
+        for payload in ({}, {'text': ''}, {'text': 'Hi', 'patient_id': str(uuid4())},
+                        {'text': 'Hi', 'prefetch': 'true'}):
             self.assertEqual(self.speak(payload).status_code, 400)
+
+    def test_legacy_prefetch_skips_cast_and_listen_pause(self):
+        with override_settings(GOOGLE_HOME_HOST='192.0.2.9'), \
+                patch('aac.casting.threading.Thread') as thread, patch('aac.views.listen.pause') as pause:
+            response = self.speak({'text': 'I want water', 'prefetch': True})
+            self.assertEqual(response.status_code, 200)
+            thread.assert_not_called()
+            pause.assert_not_called()
+            self.assertEqual(self.speak({'text': 'I want water'}).json(), response.json())
+            thread.assert_called_once()
+            pause.assert_called_once()
+        self.provider.assert_called_once()
 
 
 class ElevenLabsProviderTests(TestCase):
