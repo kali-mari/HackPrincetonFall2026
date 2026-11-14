@@ -37,6 +37,18 @@ Grove pins (base shield set to 5V): NEXT button D2, SELECT button D3, touch sens
 - Backend: `cd backend && python -m venv .venv`, activate it, `pip install -r requirements.txt`, `python manage.py migrate`, then `python manage.py runserver 8000`
 - Bridge: `python hardware/bridge.py --port <serial port>` (close the Arduino Serial Monitor first; only one program can hold the port)
 
+## Stretch goal: conversation-aware suggestions
+
+Only work on this after the core demo path works end to end. It is not required for the demo.
+
+- Optional Conversation Mode transcribes nearby speech using the computer microphone, with explicit caregiver activation, a visible listening indicator, and a stop control.
+- Use a short rolling transcript to detect the current topic and suggest exactly 6 concise words or replies for the child to choose from.
+- Never automatically select or speak a suggestion.
+- Keep transcripts in memory only; do not persist raw audio or transcripts. Clear the transcript when Conversation Mode stops.
+- If transcription or topic detection fails, keep the existing time/activity/history predictions available.
+- The Arduino sound sensor remains an input switch; it cannot transcribe speech.
+- Agree on any API contract changes with the team before implementation. Transcription provider and integration are deferred until this goal is prioritized.
+
 ## Rules
 
 - AWS credentials live only in `backend/.env`, which is gitignored. Never print, log, or commit them.
