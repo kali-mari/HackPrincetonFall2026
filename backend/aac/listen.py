@@ -5,6 +5,9 @@ audio file in real time with ffmpeg when LISTEN_DEVICE is file:<path>, for demos
 and measurements without a microphone), cuts it into phrases with the Silero voice
 detector in sherpa-onnx, and passes each phrase's text to on_text.
 
+pause(seconds) makes every listener hear silence for that long; /api/speak calls it
+so the board's own voice is not transcribed.
+
 Audio and text stay in memory: nothing here writes or logs them.
 """
 
@@ -25,12 +28,21 @@ log = logging.getLogger(__name__)
 VAD_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx'
 WINDOW = 512  # samples the voice detector takes per step (32 ms)
 MAX_PENDING = 3  # phrases waiting for the model; the oldest is dropped beyond this
+SILENCE = [0.0] * WINDOW
+
+_pause_until = 0.0  # monotonic time until which the microphone is replaced by silence
+
+
+def pause(seconds):
+    """Treat the microphone as silent for the next seconds (extends, never shortens)."""
+    global _pause_until
+    _pause_until = max(_pause_until, time.monotonic() + seconds)
 
 
 def capture_command(device):
     """A command writing 16 kHz mono signed 16-bit PCM to stdout until stopped."""
-    if device.startswith('file:'):
-        return ['ffmpeg', '-nostdin', '-loglevel', 'error', '-re', '-i', device[5:],
+    if device.startswith('file:'):  # decoded at full speed; the Listener paces it
+        return ['ffmpeg', '-nostdin', '-loglevel', 'error', '-i', device[5:],
                 '-f', 's16le', '-ac', '1', '-ar', str(SAMPLE_RATE), '-']
     return ['arecord', '-q', '-D', device, '-f', 'S16_LE', '-r', str(SAMPLE_RATE),
             '-c', '1', '-t', 'raw']
@@ -66,12 +78,14 @@ class Listener:
         self.stopped = threading.Event()
         self.phrases = queue.Queue()
         self.process = None
+        self.paced = False  # a file source is read at real-time speed, like a microphone
 
     def start(self):
         """Load the models and start recording. Blocks for the model load (seconds the
         first time); raises TranscriptionUnavailable if anything is missing."""
         transcription.load()
         vad = load_vad()
+        self.paced = settings.LISTEN_DEVICE.startswith('file:')
         try:
             self.process = subprocess.Popen(
                 capture_command(settings.LISTEN_DEVICE),
@@ -89,6 +103,7 @@ class Listener:
 
     def _record(self, vad):
         started = None  # wall time of the first sample, for phrase delays
+        windows = 0
         error = None
         try:
             while not self.stopped.is_set():
@@ -97,7 +112,13 @@ class Listener:
                     break  # capture ended: file finished, device gone or stopped
                 if started is None:
                     started = time.monotonic() - WINDOW / SAMPLE_RATE
-                vad.accept_waveform([s / 32768 for s in array.array('h', data)])
+                windows += 1
+                if self.paced:  # hand over each window when a microphone would have
+                    time.sleep(max(0.0, started + windows * WINDOW / SAMPLE_RATE - time.monotonic()))
+                if time.monotonic() < _pause_until:  # the board is speaking
+                    vad.accept_waveform(SILENCE)  # ends any phrase in progress normally
+                else:
+                    vad.accept_waveform([s / 32768 for s in array.array('h', data)])
                 self._queue_phrases(vad, started)
             if not self.stopped.is_set() and started is not None:
                 vad.flush()

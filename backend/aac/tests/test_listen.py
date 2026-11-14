@@ -51,6 +51,11 @@ def source(chunks, exit_code=0):
 
 
 class ListenerTest(SimpleTestCase):
+    def setUp(self):
+        patcher = patch.object(listen, '_pause_until', 0.0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_listener(self, command, transcribe=lambda samples: f'phrase {len(samples)}'):
         texts, ends, done = [], [], threading.Event()
 
@@ -111,6 +116,30 @@ class ListenerTest(SimpleTestCase):
             listener.process.wait(5)
         self.assertEqual((texts, ends), ([], []))
 
+    def test_pause_feeds_silence_instead_of_the_microphone(self):
+        heard = []
+        vad = FakeVad()
+        accept = vad.accept_waveform
+        vad.accept_waveform = lambda samples: (heard.append(set(samples)), accept(samples))
+        code = f'import sys; sys.stdout.buffer.write(bytes([1, 0]) * {listen.WINDOW * 2})'
+        listen.pause(5)
+        done = threading.Event()
+        with patch.object(listen, 'capture_command', return_value=[sys.executable, '-c', code]), \
+                patch.object(listen, 'load_vad', return_value=vad), \
+                patch.object(listen.transcription, 'load'), \
+                patch.object(listen.transcription, 'transcribe_samples', return_value='x'):
+            Listener(lambda *args: None, lambda error: done.set()).start()
+            self.assertTrue(done.wait(10))
+        self.assertEqual(heard, [{0.0}, {0.0}])
+
+    def test_pause_extends_but_never_shortens(self):
+        listen.pause(10)
+        until = listen._pause_until
+        listen.pause(1)
+        self.assertEqual(listen._pause_until, until)
+        listen.pause(20)
+        self.assertGreater(listen._pause_until, until)
+
     def test_backlog_keeps_only_the_newest_phrases(self):
         listener = Listener(None, None)
         vad = FakeVad()
@@ -125,7 +154,7 @@ class ListenerTest(SimpleTestCase):
         self.assertEqual(capture_command('plughw:1,0')[:4], ['arecord', '-q', '-D', 'plughw:1,0'])
         command = capture_command('file:/tmp/clip.wav')
         self.assertEqual(command[0], 'ffmpeg')
-        self.assertIn('-re', command)
+        self.assertNotIn('-re', command)  # the Listener paces files itself
         self.assertEqual(command[command.index('-i') + 1], '/tmp/clip.wav')
 
     @override_settings(LISTEN_VAD_MODEL=Path('/missing/silero_vad.onnx'))

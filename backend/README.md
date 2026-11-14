@@ -130,7 +130,9 @@ python manage.py listen --device file:sample.wav    # the same with a recording 
 
 ### Listen mode
 
-`aac/listen.py` records from the microphone on the board (`arecord` on `LISTEN_DEVICE`), cuts the audio into phrases with the Silero voice detector in sherpa-onnx (a phrase ends after about half a second of silence, or at 10 seconds), and transcribes each phrase on a second thread. If transcription falls behind, the oldest waiting phrase is dropped. `WS /ws/conversation/` (`ConversationConsumer`) starts and stops it for one connection at a time and sends each phrase back as `{"type": "transcript", "seq": n, "text": ...}`; the contract is in `docs/api-contracts.md`. Audio and text are never written or logged; the server logs only how long after each phrase its text was ready.
+`aac/listen.py` records from the microphone on the board (`arecord` on `LISTEN_DEVICE`), cuts the audio into phrases with the Silero voice detector in sherpa-onnx (a phrase ends after about half a second of silence, or at 10 seconds), and transcribes each phrase on a second thread. If transcription falls behind, the oldest waiting phrase is dropped. `WS /ws/conversation/` (`ConversationConsumer`) starts and stops it for one connection at a time and sends each phrase back as `{"type": "transcript", "seq": n, "text": ...}`; the contract is in `docs/api-contracts.md`. While the board speaks, the listener hears silence: each successful speak response calls `listen.pause()` for the clip's length (from the MP3 size at 128 kbit/s) plus a start-up margin, so the board's own voice is not transcribed. Audio and text are never written or logged; the server logs only how long after each phrase its text was ready.
+
+`LISTEN_DEVICE=file:<path>` decodes the file with ffmpeg and hands it to the voice detector at real-time speed, so it behaves like a microphone for demos and timing tests.
 
 For a USB microphone, find its card with `arecord -l` and set `LISTEN_DEVICE=plughw:<card>,0`; `plughw` converts the mic's own rate to 16 kHz mono. Check it with `python manage.py listen` before using the frontend.
 

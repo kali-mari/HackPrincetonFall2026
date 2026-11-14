@@ -33,18 +33,20 @@ in headless Chromium on the board, getting a simulated button press every second
 |---|---|---|
 | Word accuracy | 94.3% (51 errors / 889 words) | 94.3% (same text) |
 | Phrases / dropped | 36 / 0 | 36 / 0 |
-| Text after a phrase ends (median / p95 / max) | 3.6 / 5.3 / 8.1 s | 3.8 / 5.4 / 8.1 s |
-| Server process CPU (avg / max) | 0.51 / 1.07 cores | 0.53 / 1.10 cores |
-| Chromium CPU (avg / max) | - | 0.31 / 0.53 cores |
-| Whole board busy (avg / max, of 4 cores) | 0.61 / 1.21 | 0.96 / 1.53 |
-| Server peak memory | 427 MiB | 425 MiB |
-| Time from `start` to listening (model load) | 5.5 s | 5.9 s |
+| Text after a phrase ends (median / p95 / max) | 4.2 / 5.8 / 8.5 s | 4.2 / 5.9 / 8.7 s |
+| Server process CPU (avg / max) | 0.52 / 1.08 cores | 0.53 / 1.11 cores |
+| Chromium CPU (avg / max) | - | 0.30 / 0.52 cores |
+| Whole board busy (avg / max, of 4 cores) | 0.63 / 1.24 | 0.96 / 1.51 |
+| Server peak memory | 428 MiB | 425 MiB |
+| Time from `start` to listening (model load) | 5.6 s | 5.9 s |
 
 Accuracy is higher than the benchmark's Moonshine + WebRTC VAD (90.7%) because the
 Silero detector cuts phrases more cleanly. Headless Chromium had no GPU, so a kiosk
 browser on the board's display may cost more or less. Another Django server (from
 `/home/arduino/aac-integration`) was idle on port 8000 during both runs; the
-measurement used port 8010. Scripts are on the board in `/home/arduino/listen-measure/`.
+measurement used port 8010. Scripts are on the board in `/home/arduino/listen-measure/`. The delay is from the end
+of a phrase in the audio to its text being ready: half a second of silence to end the
+phrase, then decoding at about 0.4 s per second of speech, so long phrases wait longer.
 
 Side finding for the frontend owner: with the `origin/Nirmal` frontend, `/api/predict`
 returned 400 (the backend rejects a blank `activity` and a `time` without a timezone
@@ -154,9 +156,9 @@ ADB binary: `~/Library/Application Support/arduino_applab_workspace/arduino15/da
 2. **Frontend wiring** (owner of the frontend): on `LISTEN`, send `start`/`stop` on
    `/ws/conversation/` and show the latest transcripts. Contract in
    `docs/api-contracts.md`.
-3. **Pause capture while the board speaks**, so its own voice is not transcribed.
-   The backend does not know when playback ends; the frontend could send `stop`
-   before playing and `start` after.
+3. **Backup voice pause** (frontend): the backend now blanks the mic while its own
+   clips play, but the frontend's browser backup voice bypasses the backend; send
+   `stop` before it and `start` after.
 4. **Merge PR #4** once it is reviewed.
 
 ## Pick-up commands

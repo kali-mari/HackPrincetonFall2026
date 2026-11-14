@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from . import listen
 from .casting import cast_audio
 from .http import check_method, error_response, read_json_object, scaffold_response
 from .history import (
@@ -19,7 +20,7 @@ from .llm import suggest_phrases
 from .predictions import predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
-from .speech import SpeechUnavailable, synthesize
+from .speech import SpeechUnavailable, clip_seconds, synthesize
 from .validation import (
     InvalidRequest, query_limit, validate_fields, validate_string, validate_timestamp, validate_uuid,
 )
@@ -125,12 +126,19 @@ def patient_detail(request, id):
         return error_response('unavailable', 'Profile storage is unavailable.', 503)
 
 
+BROWSER_START_SECONDS = 1.5  # response to the frontend, then audio starting
+SPEAKER_START_SECONDS = 4  # Google Home connecting and buffering
+
+
 def speech_response(text, voice_id):
     try:
         url = synthesize(text, voice_id)
     except SpeechUnavailable as error:
         return error_response('unavailable', str(error), 503)
-    cast_audio(url)  # Background and optional; never changes the response.
+    cast = cast_audio(url)  # Background and optional; never changes the response.
+    # Listen mode hears silence while the clip plays, so the board's own voice is not
+    # transcribed. The margin covers the frontend (or the Google Home) starting playback.
+    listen.pause(clip_seconds(url) + (SPEAKER_START_SECONDS if cast else BROWSER_START_SECONDS))
     return JsonResponse({'audio_url': url})
 
 

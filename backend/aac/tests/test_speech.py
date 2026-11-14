@@ -151,6 +151,17 @@ class SpeakEndpointTests(SpeechTestCase):
             self.speak(text=' ')
         cast.assert_not_called()
 
+    def test_listen_mode_hears_silence_while_the_clip_plays(self):
+        self.provider.return_value = b'x' * 32_000  # 2 seconds at 128 kbit/s
+        for cast_started, margin in ((False, 1.5), (True, 4)):
+            with self.subTest(cast=cast_started), patch('aac.views.cast_audio', return_value=cast_started), \
+                    patch('aac.views.listen.pause') as pause:
+                self.ok(self.speak())
+            pause.assert_called_once_with(2.0 + margin)
+        with patch('aac.views.listen.pause') as pause:
+            self.speak(text=' ')
+        pause.assert_not_called()
+
 
 class LegacySpeakTests(SpeechTestCase):
     def speak(self, payload):

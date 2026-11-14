@@ -198,12 +198,13 @@ Server to client:
 ```
 
 - On connect the server sends `state` with `listening: false`. `start` answers with `state` `true` once the models are loaded and recording has begun (a few seconds the first time after the server starts); `stop` answers with `state` `false`. Repeating either is harmless.
-- `transcript` is one finished phrase: the text after a pause of about half a second, or every 10 seconds during continuous speech. `seq` counts from 1 for each connection. Expect the text about 1 to 4 seconds after the phrase ends on the UNO Q. There are no partial results.
+- `transcript` is one finished phrase: the text after a pause of about half a second, or every 10 seconds during continuous speech. `seq` counts from 1 for each connection. On the UNO Q the text is ready a median of about 4 seconds after the phrase ends (up to about 9 seconds for 10-second phrases). There are no partial results.
 - `error` messages are safe to show: transcription not configured (`TRANSCRIBE_PROVIDER` blank), a model or `arecord`/`ffmpeg` missing, the microphone failing, another connection already listening, or an invalid message. An error during listening is followed by `state` `false`.
 - There is one microphone, so one connection listens at a time. Closing the connection stops listening. Transcripts go only to the connection that started it, never to the `input` group, and results that arrive after `stop` are dropped.
 - If the transcription model falls behind, the oldest waiting phrase is dropped (logged without content).
 - Browser origin rules are the same as `/ws/input/`. Clients that send no `Origin` header (scripts) are allowed.
-- Not covered yet: pausing capture while the board speaks, topic detection and conversation suggestions.
+- While the board speaks, listening hears silence. Each successful `POST /api/speak` or `/api/aac/speak` blanks the microphone for the clip's length plus 1.5 s (4 s when casting to the Google Home), so the board's own voice is not transcribed. A phrase in progress ends normally. The frontend's backup voice (browser speech when `/api/speak` fails) does not go through the backend: send `stop` before it and `start` after.
+- Not covered yet: topic detection and conversation suggestions.
 
 The schema includes `InputMessage` and an `x-websocket` extension for `/ws/input/` only. Swagger does not test a WebSocket handshake or streaming behavior.
 
