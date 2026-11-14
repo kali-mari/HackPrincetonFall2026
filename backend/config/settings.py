@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -80,6 +81,13 @@ if not valid_public_url:
     raise ImproperlyConfigured(
         'BACKEND_PUBLIC_BASE_URL must be an absolute HTTP(S) URL without credentials, query or fragment.'
     )
+
+try:
+    LEGACY_DEMO_PATIENT_ID = UUID(os.environ.get(
+        'LEGACY_DEMO_PATIENT_ID', '22222222-2222-4222-8222-222222222222'
+    ))
+except ValueError:
+    raise ImproperlyConfigured('LEGACY_DEMO_PATIENT_ID must be a UUID.') from None
 
 # The unauthenticated demo is local/trusted-network only. No wildcard CORS or
 # credentials; keyboard input does not require a WebSocket connection.

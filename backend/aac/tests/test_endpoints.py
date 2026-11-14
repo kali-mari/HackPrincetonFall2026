@@ -61,7 +61,7 @@ class EndpointScaffoldTests(SimpleTestCase):
                     )
                     Draft202012Validator(self.error_schema).validate(response.json())
                 count += 1
-        self.assertEqual(count, 22)
+        self.assertEqual(count, 16)
 
     def test_methods_options_and_head(self):
         for path, methods in self.routes():

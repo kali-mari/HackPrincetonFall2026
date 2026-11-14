@@ -1,7 +1,7 @@
-"""Contract-first OpenAPI document; business routes currently return JSON 501.
+"""OpenAPI contracts with explicit per-operation implementation status.
 
 Keep schemas explicit and export with `python manage.py export_openapi`.
-Business functionality is deferred; scaffold views only check transport basics.
+Profiles are implemented; unfinished AAC/learning routes remain JSON 501 scaffolds.
 """
 
 from copy import deepcopy
@@ -619,10 +619,12 @@ def build_openapi():
         "createCaregiver",
         "profile",
         "Create caregiver",
+        implemented=True,
         request="CaregiverCreate",
         result="Caregiver",
         status=201,
-        errors=(400, 405),
+        errors=(400, 405, 503),
+        description="Persist a caregiver in SQLite. Only display_name is writable; no authentication is provided.",
         request_example={"display_name": "Demo caregiver"},
         response_example=caregiver,
     )
@@ -632,12 +634,14 @@ def build_openapi():
         "createPatient",
         "profile",
         "Create patient and caregiver link",
+        implemented=True,
+        errors=(400, 404, 405, 503),
         request="PatientCreate",
         result="Patient",
         status=201,
         request_example=patient_create,
         response_example=patient,
-        description="Caregiver must exist. Patient and relationship are created atomically. IDs supplied by clients are not authentication.",
+        description="Caregiver must exist with caregiver role (otherwise 404). Patient and relationship are created atomically in SQLite. Validate IANA timezone, language en and complete preferences. IDs supplied by clients are not authentication.",
     )
     add(
         "/api/profile/caregivers/{id}/patients",
@@ -645,6 +649,9 @@ def build_openapi():
         "listPatients",
         "profile",
         "List linked patients",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Stable ascending UUID keyset pagination. Signed cursors are bound to caregiver and order, not page size; malformed, repeated or mismatched cursors/limits and unknown query fields return 400. Results reflect live data, not a snapshot.",
         result="PatientPage",
         parameters=PAGE_PARAMETERS,
         response_example={"patients": [patient], "next_cursor": None},
@@ -655,6 +662,9 @@ def build_openapi():
         "getPatient",
         "profile",
         "Read patient setup",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Read persisted patient setup. A caregiver ID or missing patient returns 404.",
         result="Patient",
         response_example=patient,
     )
@@ -664,6 +674,9 @@ def build_openapi():
         "updatePatient",
         "profile",
         "Update patient setup",
+        implemented=True,
+        errors=(400, 404, 405, 503),
+        description="Validate mutable setup fields only; IDs/role cannot change. Supplied preferences replace the complete object. Only language en is currently supported.",
         request="PatientPatch",
         result="Patient",
         request_example={"preferences": patient["preferences"]},
@@ -675,8 +688,10 @@ def build_openapi():
         "deletePatient",
         "profile",
         "Delete patient and owned data",
+        implemented=True,
+        errors=(400, 404, 405, 503),
         status=204,
-        description="Delete links, custom definitions, events, assignments, predictions, analyses and derived configurations. Preserve global system definitions; invalidate caches. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
+        description="Atomically delete patient and caregiver links, preserving caregivers and other patients. Later patient-owned tables must cascade and extend deletion tests as implemented; events, labels, predictions and artifacts are not implemented yet. Manual demo reset/cleanup is sufficient for synthetic hackathon data.",
     )
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
@@ -1028,7 +1043,7 @@ def build_openapi():
         "Read this OpenAPI document",
         implemented=True,
         errors=(405,),
-        description="Implemented documentation endpoint; business endpoints are scaffolded (501).",
+        description="Implemented documentation endpoint; profiles are implemented and unfinished AAC/learning/legacy routes remain scaffolded (501).",
     )
     paths["/api/openapi.json"]["get"]["responses"]["200"] = {
         "description": "OpenAPI 3.1 JSON document",
@@ -1044,7 +1059,7 @@ def build_openapi():
         errors=(405,),
     )
     paths["/api/docs"]["get"]["responses"]["200"] = {
-        "description": "Swagger UI with vendored assets; Try it out exercises scaffold responses",
+        "description": "Swagger UI with vendored assets; Try it out executes implemented profiles and remaining scaffolds",
         "content": {"text/html": {"schema": {"type": "string"}}},
     }
     return deepcopy(
@@ -1053,7 +1068,7 @@ def build_openapi():
             "info": {
                 "title": "Smart AAC Board API",
                 "version": "0.1.0",
-                "description": "Contract-first local demo API. Documentation routes are implemented. Business routes marked SCAFFOLD are wired and return JSON 501 until features are implemented; only transport-level JSON/method checks currently run. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
+                "description": "Contract-first local demo API. Documentation and six profile operations are implemented with SQLite persistence and field/relationship validation. Remaining AAC/learning/legacy routes marked SCAFFOLD return JSON 501 until implemented; they check transport only. Swagger Try it out is enabled to inspect those responses. No auth: synthetic data/trusted local network only; do not expose publicly through Caddy. SQLite on UNO Q is the chosen source of truth. Conversation Mode is a separate local-only stretch feature, not part of this HTTP contract. JSON timestamps require offsets; IDs are UUIDs. Never automatically select/speak predictions.",
             },
             "servers": [
                 {
