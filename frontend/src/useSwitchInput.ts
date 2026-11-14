@@ -24,16 +24,22 @@ function parse(data: unknown): { action: Action; source: Source } | null {
 export function useSwitchInput(enabled: SourceSettings, onAction: (action: Action, now: number) => void) {
   const [connected, setConnected] = useState(false)
   const [flash, setFlash] = useState<Source | null>(null)
+  const flashTimer = useRef<number | undefined>(undefined)
+  // Also used by the laptop-mic voice switch, so the caregiver cell has one flash display.
+  function showFlash(source: Source) {
+    setFlash(source)
+    clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlash(null), FLASH_MS)
+  }
   // Refs keep the socket open across renders while still calling the latest handler and settings.
-  const latest = useRef({ enabled, onAction })
+  const latest = useRef({ enabled, onAction, showFlash })
   useEffect(() => {
-    latest.current = { enabled, onAction }
+    latest.current = { enabled, onAction, showFlash }
   })
 
   useEffect(() => {
     let socket: WebSocket
     let retry: number | undefined
-    let flashTimer: number | undefined
     let attempt = 0
     let stopped = false
 
@@ -48,9 +54,7 @@ export function useSwitchInput(enabled: SourceSettings, onAction: (action: Actio
         const msg = parse(event.data)
         if (!msg || !latest.current.enabled[msg.source]) return
         latest.current.onAction(msg.action, event.timeStamp)
-        setFlash(msg.source)
-        clearTimeout(flashTimer)
-        flashTimer = setTimeout(() => setFlash(null), FLASH_MS)
+        latest.current.showFlash(msg.source)
       }
       socket.onclose = () => {
         setConnected(false)
@@ -63,10 +67,10 @@ export function useSwitchInput(enabled: SourceSettings, onAction: (action: Actio
     return () => {
       stopped = true
       clearTimeout(retry)
-      clearTimeout(flashTimer)
+      clearTimeout(flashTimer.current)
       socket.close()
     }
   }, [])
 
-  return { connected, flash }
+  return { connected, flash, showFlash }
 }
