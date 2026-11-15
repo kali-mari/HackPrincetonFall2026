@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { events, patientPreferences, predict, saveFavorites, type FavoriteItems, type LogEvent } from './api'
+import { events, patientPreferences, predict, saveFavorites, type CaregiverProfile, type FavoriteItems, type LogEvent, type PatientProfile } from './api'
 import styles from './Caregiver.module.css'
 
 type Prediction = { label: string; activity: string; phrases: string[] }
@@ -17,7 +17,10 @@ function at1215() {
   return time
 }
 
-export default function Caregiver() {
+type Props = { patient: PatientProfile; caregiver: CaregiverProfile; patients: PatientProfile[];
+  onSelectPatient: (id: string) => void; onSwitchProfile: () => void }
+
+export default function Caregiver({ patient, caregiver, patients, onSelectPatient, onSwitchProfile }: Props) {
   const [spoken, setSpoken] = useState<LogEvent[] | null>(null)
   const [predictions, setPredictions] = useState<Prediction[]>([])
   const [error, setError] = useState('')
@@ -45,7 +48,7 @@ export default function Caregiver() {
     }
     setSavingFavorites(true)
     try {
-      await saveFavorites(favorites)
+      await saveFavorites(patient.id, favorites)
       setFavoriteStatus('Favorites saved.')
       setSavedVersion((value) => value + 1)
     } catch {
@@ -57,7 +60,7 @@ export default function Caregiver() {
 
   useEffect(() => {
     if (savedVersion === 0) {
-      patientPreferences().then((preferences) => {
+      patientPreferences(patient.id).then((preferences) => {
         const favorites = preferences.favorites ?? {}
         setFavoriteDraft({ foods: (favorites.foods ?? []).join('\n'), drinks: (favorites.drinks ?? []).join('\n'),
           activities: (favorites.activities ?? []).join('\n') })
@@ -65,14 +68,14 @@ export default function Caregiver() {
       }).catch(() => setFavoriteError('Favorite items could not be loaded. Check the connection and reload.'))
     }
     const since = Date.now() - RECENT_DAYS * DAY_MS
-    events()
+    events(patient.id)
       .then((all) => setSpoken(all.filter((e) => e.kind === 'spoken' && new Date(e.timestamp).getTime() >= since)))
       .catch((err) => {
         console.error(err)
         setError("Recent sentences didn't load. Check that the backend is running on port 8000, then reload this page.")
       })
     const now = new Date()
-    Promise.all([predict(now, []), predict(at1215(), [])])
+    Promise.all([predict(patient.id, now, []), predict(patient.id, at1215(), [])])
       .then(([a, b]) =>
         setPredictions([
           { label: `Now, ${timeFormat.format(now)}`, ...a },
@@ -83,7 +86,7 @@ export default function Caregiver() {
         console.error(err)
         setPredictionError("Predictions didn't load. Check that the backend is running on port 8000, then reload this page.")
       })
-  }, [savedVersion])
+  }, [savedVersion, patient.id])
 
   // Events arrive newest first, so each day's group and the days themselves stay newest first.
   const days = new Map<string, LogEvent[]>()
@@ -100,15 +103,27 @@ export default function Caregiver() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <h1>Today</h1>
+          <h1>{patient.display_name}’s day</h1>
           <p className={styles.muted}>
             {today.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
+          <p className={styles.muted}>Caregiver: {caregiver.display_name}</p>
         </div>
-        <a className={styles.back} href="#/">
+        <div className={styles.profileControls}>
+          <label>Patient profile<select value={patient.id} onChange={(event) => onSelectPatient(event.target.value)}>
+            {patients.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}
+          </select></label>
+          <button className={styles.back} onClick={onSwitchProfile}>Switch profile</button>
+          <a className={styles.back} href="#/">
           Back to the board
-        </a>
+          </a>
+        </div>
       </header>
+
+      <details className={styles.deviceCode}><summary>Use these profiles on another device</summary>
+        <p>Open onboarding on the other device, choose “Use caregiver code,” and enter:</p>
+        <code>{caregiver.id}</code>
+      </details>
 
       <main className={styles.columns}>
         <section className={styles.card} aria-labelledby="log-title">

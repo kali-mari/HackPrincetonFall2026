@@ -62,14 +62,38 @@ npm ci
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-Open `http://localhost:5173` and click **Tap to start** once to enable browser
-audio. Keep the page open during the hardware test. Restart Vite after switching
+Open `http://localhost:5173`, choose or create a patient profile, then click
+**Tap to start** once to enable browser audio. Keep the page open during the hardware test. Restart Vite after switching
 branches if API requests return an empty 404 instead of Django JSON.
 
 The backend currently has no speech-provider credentials. The frontend's **Backup
-voice** uses the browser voice when `/api/speak` returns 503. Confirm sound is
+voice** uses the browser voice when `/api/aac/speak` returns 503. Confirm sound is
 audible; a successful API fallback alone does not prove that the speakers work.
 Google Home should stay off for this test.
+
+## Onboarding and switching profiles
+
+New devices open the onboarding page. Choose **Caregiver** to create a caregiver
+profile, then add a patient; choosing **Patient** first creates the caregiver and
+linked patient together. Each patient has a name and timezone. **Try the demo
+profiles** connects to the seeded profiles when they are installed.
+
+On the board, open **Input settings → Switch profile**. The caregiver dashboard
+also has **Switch profile**, a linked-patient selector, and **Back to the board**.
+Every device can use either view. Changing views or patients clears the unfinished
+sentence and stops board listening and local playback. Space/Enter scanning stays
+available on the patient board; onboarding uses normal Tab/Enter form controls.
+
+The browser remembers the chosen caregiver, patient, and view. Profiles, favorites,
+predictions, speech, and communication history use explicit patient IDs through
+the existing profile and AAC APIs; SQLite on the connected backend remains the
+source of truth. A device does not silently fall back to the demo patient.
+
+To use existing profiles on another device connected to the same backend, expand
+**Use these profiles on another device** in the caregiver dashboard. Enter that
+caregiver code through **Use caregiver code** on the other device's onboarding
+page. This selects a family of linked profiles; the hackathon app has no login or
+access restrictions between the two views.
 
 ## Check each button
 

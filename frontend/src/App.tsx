@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { activityAt, logSentence, patientPreferences, predict, speak, type FavoriteItems } from './api'
+import { activityAt, logSentence, patientPreferences, predict, speak, type FavoriteItems, type PatientProfile } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
@@ -46,8 +46,6 @@ function loadSettings(): SourceSettings {
   }
 }
 
-type ScanItem = { key: string; action: () => void }
-
 // The sentence holds labels, so each strip chip looks up its tile's Fitzgerald color.
 const WORD_TYPES = new Map<string, WordType>(
   [...CORE_WORDS, ...CATEGORIES.flatMap((c) => Object.values(c.slots))].map((w) => [w.label, w.wordType]),
@@ -68,29 +66,36 @@ const PREDICT_EVERY_MS = 60_000
 const RECENT_COUNT = 3
 
 // Resolves when the clip finishes, so Speak stays disabled until the room has heard it.
-async function playAudio(url: string) {
+async function playAudio(url: string, signal: AbortSignal) {
+  if (signal.aborted) throw new DOMException('Playback cancelled', 'AbortError')
   const audio = new Audio(url)
-  const ended = new Promise((resolve, reject) => {
-    audio.onended = resolve
-    audio.onerror = reject
+  await new Promise<void>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', abort)
+    const abort = () => { audio.pause(); cleanup(); reject(new DOMException('Playback cancelled', 'AbortError')) }
+    signal.addEventListener('abort', abort, { once: true })
+    audio.onended = () => { cleanup(); resolve() }
+    audio.onerror = () => { cleanup(); reject(new Error('Audio playback failed')) }
+    audio.play().catch((error) => { cleanup(); reject(error) })
   })
-  await audio.play()
-  await ended
 }
 
 // Backup voice when /api/speak or its audio fails, so the board never goes silent.
-function speakInBrowser(text: string) {
+function speakInBrowser(text: string, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) return reject(new DOMException('Playback cancelled', 'AbortError'))
     if (!('speechSynthesis' in window)) return reject(new Error('speechSynthesis is not available'))
     const utterance = new SpeechSynthesisUtterance(text)
+    const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', abort) }
+    const abort = () => { cleanup(); speechSynthesis.cancel(); reject(new DOMException('Playback cancelled', 'AbortError')) }
     // shortcut: some browsers never fire onend (no voices installed), so stop waiting after a generous estimate.
-    const timer = setTimeout(resolve, 2000 + text.length * 150)
+    const timer = setTimeout(() => { cleanup(); resolve() }, 2000 + text.length * 150)
+    signal.addEventListener('abort', abort, { once: true })
     utterance.onend = () => {
-      clearTimeout(timer)
+      cleanup()
       resolve()
     }
     utterance.onerror = (e) => {
-      clearTimeout(timer)
+      cleanup()
       reject(new Error(`speechSynthesis failed: ${e.error}`))
     }
     speechSynthesis.cancel()
@@ -105,7 +110,7 @@ const BLANK_PREDICTIONS = Array<string>(6).fill('')
 
 const onCaregiverPage = () => location.hash === '#/caregiver'
 
-export default function App() {
+export default function App({ patient, onSwitchProfile }: { patient: PatientProfile; onSwitchProfile: () => void }) {
   const [strip, setStrip] = useState(EMPTY_STRIP)
   const sentence = strip.words
   const [backupVoice, setBackupVoice] = useState(false) // the last sentence used the browser's voice
@@ -134,6 +139,14 @@ export default function App() {
   const [activity, setActivity] = useState('')
   const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
   const [recent, setRecent] = useState<string[]>([]) // last 3 sentences spoken this session
+  const lastInputSource = useRef<'button' | 'keyboard'>('button')
+  const playbackAbort = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    playbackAbort.current = controller
+    return () => controller.abort()
+  }, [])
 
   function toggleSource(id: Source) {
     const updated = { ...sources, [id]: !sources[id] }
@@ -183,7 +196,7 @@ export default function App() {
         time.setHours(hours, minutes, 0, 0)
       }
       setActivity(activityAt(time))
-      const [prediction, profile] = await Promise.allSettled([predict(time, recent), patientPreferences()])
+      const [prediction, profile] = await Promise.allSettled([predict(patient.id, time, recent), patientPreferences(patient.id)])
       if (stale) return
       if (profile.status === 'fulfilled') setFavorites(profile.value.favorites ?? {})
       if (prediction.status === 'fulfilled') {
@@ -204,28 +217,35 @@ export default function App() {
       clearInterval(timer)
       window.removeEventListener('hashchange', onRoute)
     }
-  }, [demoTime, recent])
+  }, [demoTime, recent, patient.id])
 
   // Speaks a sentence from the strip (then clears it) or a prediction phrase (strip untouched).
   async function say(sentenceText: string, fromStrip: boolean) {
     if (!sentenceText || speaking) return
+    const signal = playbackAbort.current?.signal
+    if (!signal || signal.aborted) return
+    const inputSource = lastInputSource.current
     setSpeaking(true)
-    await conversation.pause()
     let playedLocally = !playOnHome
     try {
+      await conversation.pause()
+      if (signal.aborted) return
       try {
-        const url = await speak(sentenceText)
+        const url = await speak(patient.id, sentenceText)
+        if (signal.aborted) return
         // The backend casts to the Google Home itself; playing here too would echo.
-        if (!playOnHome) await playAudio(url)
+        if (!playOnHome) await playAudio(url, signal)
         setBackupVoice(false)
       } catch (err) {
+        if (signal.aborted) return
         // Speech provider down (503), timed out, or the clip failed: speak with the browser instead.
         console.error('Speech failed; using the backup voice.', err)
-        await speakInBrowser(sentenceText)
+        await speakInBrowser(sentenceText, signal)
         setBackupVoice(true)
         playedLocally = true
       }
     } catch (err) {
+      if (signal.aborted) return
       console.error(err)
       setError("Couldn't speak. Try again.")
       setTimeout(() => setError(''), ERROR_MS)
@@ -234,10 +254,11 @@ export default function App() {
       setSpeaking(false)
       conversation.resume()
     }
+    if (signal.aborted) return
     if (fromStrip) setStrip((s) => ({ ...s, words: [] }))
     // Only confirmed local playback counts as spoken (api-contracts.md event lifecycle); a cast is unconfirmed.
     // The child was already heard, so a failed log is not worth an error banner.
-    if (playedLocally) logSentence(sentenceText).catch(console.error)
+    if (playedLocally) logSentence(patient.id, sentenceText, inputSource, activity).catch(console.error)
     setRecent((r) => [...r, sentenceText].slice(-RECENT_COUNT))
   }
   const handleSpeak = () => say(text, true)
@@ -255,20 +276,16 @@ export default function App() {
   }
 
   // Scan groups in LAYOUT.md order, using the same actions as taps. Empty slots are skipped.
-  const groups: ScanItem[][] = [
-    [
-      { key: 'speak', action: handleSpeak },
-      { key: 'delete', action: deleteLast },
-      { key: 'clear', action: clear },
-    ],
-    predictions.map((phrase, i) => ({ key: `pred-${i}`, action: () => say(phrase, false) })),
-    CATEGORIES.map((c) => ({ key: `tab-${c.id}`, action: () => setCategoryId(c.id) })),
+  const groups: string[][] = [
+    ['speak', 'delete', 'clear'],
+    predictions.map((_, i) => `pred-${i}`),
+    CATEGORIES.map((c) => `tab-${c.id}`),
   ]
   for (let row = 0; row < GRID_ROWS; row++) {
-    const items: ScanItem[] = []
+    const items: string[] = []
     for (let i = row * GRID_COLUMNS; i < (row + 1) * GRID_COLUMNS; i++) {
       const word = cells[i]
-      if (word) items.push({ key: `cell-${i}`, action: () => addTile(word) })
+      if (word) items.push(`cell-${i}`)
     }
     groups.push(items)
   }
@@ -280,10 +297,10 @@ export default function App() {
     const size = groups[scan.group].length
     const level = scan.item === null ? 'group' : scan.item === size ? 'back' : 'item'
     groups.forEach((group, g) =>
-      group.forEach((item, i) => {
-        if (g !== scan.group) marks.set(item.key, 'dim')
-        else if (level !== 'item') marks.set(item.key, level)
-        else if (i === scan.item) marks.set(item.key, 'item')
+      group.forEach((key, i) => {
+        if (g !== scan.group) marks.set(key, 'dim')
+        else if (level !== 'item') marks.set(key, level)
+        else if (i === scan.item) marks.set(key, 'item')
       }),
     )
   }
@@ -292,12 +309,24 @@ export default function App() {
   function scanSelect() {
     const result = select(scan, sizes)
     setScan(result.state)
-    if (result.activate) groups[result.activate[0]][result.activate[1]].action()
+    if (result.activate) {
+      const key = groups[result.activate[0]][result.activate[1]]
+      if (key === 'speak') handleSpeak()
+      else if (key === 'delete') deleteLast()
+      else if (key === 'clear') clear()
+      else if (key.startsWith('pred-')) void say(predictions[Number(key.slice(5))], false)
+      else if (key.startsWith('tab-')) setCategoryId(key.slice(4))
+      else if (key.startsWith('cell-')) {
+        const word = cells[Number(key.slice(5))]
+        if (word) addTile(word)
+      }
+    }
   }
 
   // One path for switches and keyboard. DELETE and SPEAK act directly and leave the highlight where it is.
   // `now` is a millisecond clock from the caller, only compared within one input source.
-  function act(action: Action, now: number) {
+  function act(action: Action, now: number, source: 'button' | 'keyboard' = 'button') {
+    lastInputSource.current = source
     if (action === 'PREV' || action === 'NEXT') {
       chord.current = [...chord.current, { state: scan, at: now }].slice(-2)
       setScan((action === 'PREV' ? prev : next)(scan, sizes))
@@ -346,7 +375,7 @@ export default function App() {
       // Stop the browser from also clicking whichever button has focus.
       e.preventDefault()
       if (e.repeat) return
-      act(action, e.timeStamp)
+      act(action, e.timeStamp, 'keyboard')
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
@@ -360,7 +389,7 @@ export default function App() {
           top: showConversation ? 'calc(50% + 76px)' : undefined,
           transform: `translate(-50%, -50%) scale(${showConversation ? Math.max(0.1, Math.min(scale, (window.innerHeight - 152) / BOARD_HEIGHT)) : scale})`,
         }}
-        onPointerDown={() => setScan(null)}
+        onPointerDown={() => { lastInputSource.current = 'button'; setScan(null) }}
       >
         <h1 className={styles.visuallyHidden}>Smart AAC Board</h1>
         {/* Announces each spoken sentence to screen readers. */}
@@ -530,6 +559,7 @@ export default function App() {
 
       <dialog ref={settingsDialog} className={styles.dialog} aria-labelledby="settings-title">
         <h2 id="settings-title">Input settings</h2>
+        <p>Patient profile: <strong>{patient.display_name}</strong></p>
         <p>Choose which switches can move the highlight.</p>
         <button className={styles.secondary} onClick={() => {
           conversation.toggle()
@@ -593,6 +623,11 @@ export default function App() {
         }}>
           Caregiver dashboard
         </button>
+        <button className={styles.secondary} onClick={() => {
+          settingsDialog.current?.close()
+          onSwitchProfile()
+        }}>Switch profile</button>
+        <p>Switching profiles stops listening and clears the unfinished sentence.</p>
       </dialog>
 
       {!started && (
