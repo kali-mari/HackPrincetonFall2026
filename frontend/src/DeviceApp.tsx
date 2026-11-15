@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import App from './App'
 import Caregiver from './Caregiver'
 import Onboarding from './Onboarding'
+import EngineDemo from './EngineDemo'
 import { createCaregiver, createPatient, listPatients, type CaregiverProfile, type PatientProfile } from './api'
 import { readDeviceProfile, rememberDeviceProfile, type DeviceMode } from './deviceProfile'
 import styles from './Onboarding.module.css'
@@ -13,7 +14,7 @@ export default function DeviceApp() {
   const [patients, setPatients] = useState<PatientProfile[]>([])
   const [patientId, setPatientId] = useState<string | null>(saved?.patientId ?? null)
   const [mode, setMode] = useState<DeviceMode>(saved?.mode ?? 'caregiver')
-  const [route, setRoute] = useState(() => !saved ? '#/profiles'
+  const [route, setRoute] = useState(() => location.hash === '#/engine' ? '#/engine' : !saved ? '#/profiles'
     : location.hash === '#/profiles' ? '#/profiles' : location.hash === '#/caregiver' || saved.mode === 'caregiver' ? '#/caregiver' : '#/')
   const [resolved, setResolved] = useState(!saved)
   const [loading, setLoading] = useState(Boolean(saved))
@@ -80,6 +81,7 @@ export default function DeviceApp() {
     setPatients(rows); setPatientId(null); setError(''); setResolved(true)
   }
 
+  if (route === '#/engine') return <EngineDemo />
   if (!resolved) return <main className={styles.page}><div className={styles.shell} role="status">Loading your profiles…</div></main>
   if (route === '#/profiles' || !caregiver || (route !== '#/caregiver' && !patient)) return <Onboarding
     caregiver={caregiver} patients={patients} selectedPatientId={patientId} loading={loading} error={error}

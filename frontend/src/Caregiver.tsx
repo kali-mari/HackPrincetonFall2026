@@ -129,6 +129,7 @@ export default function Caregiver({ patient, caregiver, patients, onSelectPatien
           <p className={styles.muted}>Caregiver: {caregiver.display_name}</p>
         </div>
         <div className={styles.profileControls}>
+          <a className={styles.back} href="#/engine">Engine at work</a>
           <label>Patient profile<select value={patient.id} onChange={(event) => onSelectPatient(event.target.value)}>
             {patients.map((item) => <option key={item.id} value={item.id}>{item.display_name}</option>)}
           </select></label>
