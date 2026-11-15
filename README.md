@@ -150,30 +150,7 @@ Assistive medical technology demands uncompromising data privacy. SaySo guarante
 - **Google Gemini Optimization:**
   - Uses `gemini-3.5-flash-lite` with `ThinkingLevel.MINIMAL` to guarantee responses within a hard **2-second deadline**.
   - Enforces structured JSON output via `response_json_schema` specifying exactly 6 child-friendly phrases under 100 characters.
-
----
-
-## 🏆 Target Tracks & Impact
-
-### 🌟 Best Use of Gemini API
-* Leverages Google Gemini 3.5 Flash-Lite's ultra-low latency and structured JSON output schema to deliver conversational predictions within human reaction thresholds (< 2s).
-* Exemplifies responsible, privacy-first AI engineering by isolating sensitive healthcare data on-device while harnessing Gemini for linguistic reasoning.
-
-### 🏥 Best Healthcare Hack
-* Directly addresses communicative isolation for individuals with cerebral palsy, ALS, apraxia, stroke, and autism.
-* Features a dedicated Caregiver / Speech-Language Pathologist (SLP) dashboard to monitor expressive language progress, vocabulary adoption, and communication history.
-
-### ⚙️ Best Hardware Hack
-* Integrates physical computing (Arduino Uno R3 / Uno Q) with custom 50ms software debouncing, chord detection, and direct bare-metal 4-bit parallel driving of an HD44780 16x2 LCD display.
-* Features a bi-directional USB serial-to-WebSocket bridge for seamless physical-digital integration.
-
-### 🤖 Best Physical AI Hack
-* Bridges tactile physical hardware switches with edge acoustic AI (Silero Voice Activity Detection, Moonshine tiny transcription) and cloud intelligence (Google Gemini) into a coherent, responsive physical appliance.
-
-### 💡 Best Practical AI Innovation
-* **Agentic & Context-Adaptive:** Actively listens to conversations and infers the user's immediate communication intent without tedious manual input.
-* **Resilient Fail-Safe Design:** If network connectivity drops, the board automatically falls back to local deterministic history and browser voice synthesis—ensuring the user is never silenced.
-
+  - 
 ---
 
 ## 📂 Repository Structure & Quickstart
