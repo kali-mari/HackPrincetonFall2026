@@ -7,6 +7,7 @@ import logging
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
 
+from . import conversation
 from .listen import Listener
 from .transcription import TranscriptionUnavailable
 
@@ -129,6 +130,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.send_error("Another connection is already listening.")
             return
         ConversationConsumer.owner = self
+        conversation.warm()  # background: the suggestion model is ready by the first question
         loop = asyncio.get_running_loop()
         listener = Listener(
             on_text=lambda text, delay: asyncio.run_coroutine_threadsafe(

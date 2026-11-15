@@ -125,6 +125,19 @@ except ValueError:
     TRANSCRIBE_THREADS = 0
 if not 1 <= TRANSCRIBE_THREADS <= 4:
     raise ImproperlyConfigured('TRANSCRIBE_THREADS must be a whole number from 1 to 4.')
+# On-device sentence embeddings for conversation suggestions. EMBED_PROVIDER picks a
+# loader in aac/embeddings.py (minilm); blank turns it off and topics fall back to
+# word-bank keywords. Nothing here leaves the device.
+EMBED_PROVIDER = os.environ.get('EMBED_PROVIDER', '').strip().lower()
+if EMBED_PROVIDER and EMBED_PROVIDER not in {'minilm'}:
+    raise ImproperlyConfigured('EMBED_PROVIDER must be minilm or blank.')
+EMBED_MODEL_DIR = env_path('EMBED_MODEL_DIR', 'models/minilm-l6-v2')
+try:
+    EMBED_THREADS = int(os.environ.get('EMBED_THREADS', '1'))
+except ValueError:
+    EMBED_THREADS = 0
+if not 1 <= EMBED_THREADS <= 4:
+    raise ImproperlyConfigured('EMBED_THREADS must be a whole number from 1 to 4.')
 # Listen mode records from this ALSA device with arecord (for example plughw:1,0 for
 # a USB microphone; see arecord -l), or plays file:<path> in real time instead.
 LISTEN_DEVICE = os.environ.get('LISTEN_DEVICE', 'default').strip() or 'default'

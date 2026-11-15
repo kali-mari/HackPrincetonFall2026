@@ -69,14 +69,19 @@ class ValidationTests(SimpleTestCase):
         self.assertRejected(lambda d: d['topics'][0].update(profile_key='favorites.toys'), 'profile_key')
         self.assertRejected(lambda d: d['topics'][0].update(profile_key='name'), 'profile_key')
 
+    def test_keywords(self):
+        self.assertRejected(lambda d: d['topics'][0].update(keywords=[]), 'keywords must be')
+        self.assertRejected(lambda d: d['topics'][0].update(keywords=['Water']), 'keywords must be')
+        self.assertRejected(lambda d: d['topics'][0].update(keywords=['ice cream']), 'keywords must be')
+
     def test_template_needs_one_slot(self):
         self.assertRejected(lambda d: d['topics'][0].update(template='I want it'), 'one {}')
 
     def test_topic_needs_examples_and_phrases(self):
         self.assertRejected(lambda d: d['topics'][0].update(examples=['Are you thirsty?']), 'at least 2 examples')
         self.assertRejected(
-            lambda d: d['topics'].append({'id': 'weather', 'label': 'Weather', 'profile_key': None,
-                                          'template': '{}', 'examples': ['Is it raining?', 'Is it sunny?']}),
+            lambda d: d['topics'].append({'id': 'weather', 'label': 'Weather', 'profile_key': None, 'template': '{}',
+                                          'keywords': ['rain'], 'examples': ['Is it raining?', 'Is it sunny?']}),
             "'weather' needs at least 4 phrases",
         )
 

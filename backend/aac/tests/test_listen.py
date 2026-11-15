@@ -275,6 +275,12 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         self.assertTrue(listener.stopped)
         await self.start(second)
 
+    async def test_start_warms_the_suggestion_model_without_waiting(self):
+        with patch.object(consumers.conversation, 'warm') as warm:
+            ws, _ = await self.connect()
+            await self.start(ws)
+        warm.assert_called_once_with()
+
     async def test_start_twice_is_harmless(self):
         ws, _ = await self.connect()
         await self.start(ws)

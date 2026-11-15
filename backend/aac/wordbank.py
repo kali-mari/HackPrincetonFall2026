@@ -62,13 +62,17 @@ def validate(data):
     topics = {}
     for index, topic in enumerate(data['topics']):
         where = f'topics[{index}]'
-        _fields(topic, {'id', 'label', 'profile_key', 'template', 'examples'}, where)
+        _fields(topic, {'id', 'label', 'profile_key', 'template', 'keywords', 'examples'}, where)
         _check(isinstance(topic['id'], str) and ID_PATTERN.match(topic['id']), f'{where} id must be lowercase words.')
         where = f'topic {topic["id"]!r}'
         _check(topic['id'] not in topics, f'{where} is defined twice.')
         _text(topic['label'], f'{where} label')
         _profile_key(topic['profile_key'], where)
         _check(_text(topic['template'], f'{where} template').count('{}') == 1, f'{where} template needs one {{}}.')
+        keywords = topic['keywords']  # Fallback matching when the embedding model is off or slow.
+        _check(isinstance(keywords, list) and keywords and len(set(keywords)) == len(keywords)
+               and all(isinstance(word, str) and re.fullmatch(r'[a-z]+', word) for word in keywords),
+               f'{where} keywords must be distinct lowercase single words.')
         examples = topic['examples']
         _check(isinstance(examples, list) and len(examples) >= 2, f'{where} needs at least 2 examples.')
         for example in examples:
