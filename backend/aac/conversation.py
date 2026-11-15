@@ -35,6 +35,9 @@ YES_NO_STARTS = {'am', 'are', 'is', 'was', 'were', 'do', 'does', 'did', 'can', '
 ARTICLES = {'a', 'an', 'the', 'some', 'your', 'my'}
 NOT_OPTIONS = {'not', 'something', 'anything', 'else', 'this', 'that', 'it', 'you', 'me', 'them', 'so'}
 PARTICLES = {'away', 'out', 'up', 'off', 'down', 'over'}  # "taking away", "going out"
+FILLER = {'okay', 'ok', 'well', 'um', 'uh', 'hey', 'hi', 'now', 'then', 'alright', 'and', 'like'}
+MAX_OPTIONS = 5  # with "Something else", the six cards
+MAX_OPTION_WORDS = 3
 
 # One worker: a slow model call never piles up threads, and the next call skips the
 # model until it finishes.
@@ -57,25 +60,66 @@ def is_yes_no(text):
     return bool(found) and found[0] in YES_NO_STARTS
 
 
+def _without_articles(found):
+    while found and found[0] in ARTICLES:
+        found = found[1:]
+    return found
+
+
 def or_options(text):
-    """["Water", "Juice"] for "Water or juice?"; [] unless the line names exactly two short options."""
-    found = words(text)
-    if found.count('or') != 1:
+    """Options the question names, in order, or [] unless it names at least two.
+
+    "Water or juice?" -> Water, Juice; "Water, juice, or milk?" and "Red or blue or
+    green?" -> three options (up to MAX_OPTIONS). Items between commas or "or" can be
+    a few words ("orange juice"); the first item keeps only its last word, since the
+    words before it are the question ("Do you want water" -> Water).
+    """
+    tokens = re.findall(r"[a-z0-9']+|,", text.lower())
+    ors = [index for index, token in enumerate(tokens) if token == 'or']
+    if not ors:
         return []
-    index = found.index('or')
-    before, after = found[:index], found[index + 1:]
-    while after and after[0] in ARTICLES:
-        after = after[1:]
-    if not before or not after or before[-1] in ARTICLES | NOT_OPTIONS or after[0] in NOT_OPTIONS:
+    after = _without_articles(tokens[ors[-1] + 1:])
+    if not after or after[0] == ',' or after[0] in NOT_OPTIONS:
         return []
-    first, second = before[-1], after[0]
-    if len(after) > 1 and after[1] == first and len(before) > 1:  # "plus sign or minus sign"
-        first, second = f'{before[-2]} {first}', f'{second} {after[1]}'
-    elif len(after) > 1 and after[1] in PARTICLES:
-        second = f'{second} {after[1]}'
-    if first in PARTICLES and len(before) > 1:  # "go out or stay in"
-        first = f'{before[-2]} {first}'
-    return [option[:1].upper() + option[1:] for option in (first, second)]
+    final = after[:2] if len(after) > 1 and after[1] in PARTICLES else after[:1]  # "taking away"
+
+    segments, current, bounded = [], [], False  # (words, whether a separator precedes them)
+    for token in tokens[:ors[-1]]:
+        if token in (',', 'or'):
+            segments.append((current, bounded))
+            current, bounded = [], True
+        else:
+            current.append(token)
+    segments.append((current, bounded))
+
+    items = []
+    for found, bounded in reversed([(_without_articles(found), bounded) for found, bounded in segments if found]):
+        if not found:
+            continue
+        if bounded and len(found) <= MAX_OPTION_WORDS:  # a whole item between separators
+            items.insert(0, found)
+            continue
+        last = found[-1]  # the first item: the words before it are the question itself
+        if last in FILLER | NOT_OPTIONS:
+            break
+        shares_last = (len(after) > 1 and after[1] == last) or any(len(item) > 1 and item[-1] == last for item in items)
+        if len(found) > 1 and (last in PARTICLES or shares_last):  # "go out", "plus sign"
+            items.insert(0, found[-2:])
+            if len(after) > 1 and after[1] == last:
+                final = after[:2]  # "... or minus sign"
+        else:
+            items.insert(0, [last])
+        break
+
+    options, seen = [], set()
+    for item in [*items, final]:
+        if item[0] in FILLER | NOT_OPTIONS:
+            continue
+        text = ' '.join(item)
+        if text not in seen:
+            seen.add(text)
+            options.append(text[:1].upper() + text[1:])
+    return options[:MAX_OPTIONS] if len(options) >= 2 else []
 
 
 def keyword_topic(bank, text):
@@ -193,6 +237,12 @@ def suggest(lines, preferences, recent=(), threshold=TOPIC_THRESHOLD):
         if topic_id:
             break
     question, options = is_question(newest), or_options(newest)
+    opening = words(newest)[:1]
+    if len(lines) > 1 and opening and opening[0] not in QUESTION_WORDS | YES_NO_STARTS:
+        # A pause can split "Do you want water, juice," / "or milk?": read the list across both lines.
+        joined = or_options(f'{lines[-2].rstrip(" .?!")}, {newest}')
+        if len(joined) > len(options):
+            options = joined
     if topic_id is None and not question and not options:
         return None
     yes_no = is_yes_no(newest) and not options

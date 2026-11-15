@@ -85,6 +85,32 @@ class KeywordSuggestionTests(SimpleTestCase):
                          ['Plus sign', 'Minus sign'])
         self.assertEqual(self.suggest('Do you have science or art this term?')['phrases'][:2], ['Science', 'Art'])
 
+    def test_three_or_more_options(self):
+        cases = {
+            'Do you want water, juice, or milk?': ['Water', 'Juice', 'Milk'],
+            'Do you want water, juice or milk?': ['Water', 'Juice', 'Milk'],
+            'Red or blue or green?': ['Red', 'Blue', 'Green'],
+            'Would you like apple juice, orange juice, or milk?': ['Apple juice', 'Orange juice', 'Milk'],
+            'Okay, juice or milk?': ['Juice', 'Milk'],
+            'Do you want pizza, pasta, soup, rice, or a sandwich?': ['Pizza', 'Pasta', 'Soup', 'Rice', 'Sandwich'],
+        }
+        for question, options in cases.items():
+            with self.subTest(question=question):
+                self.assertEqual(conversation.or_options(question), options)
+        result = self.suggest('Do you want water, juice, or milk?')
+        self.assertEqual(result['phrases'][:3], ['Water', 'Juice', 'Milk'])
+        self.assertEqual(result['phrases'][-1], 'Something else')
+
+    def test_five_options_still_leave_something_else(self):
+        result = self.suggest('Do you want pizza, pasta, soup, rice, or a sandwich?')
+        self.assertEqual(result['phrases'], ['Pizza', 'Pasta', 'Soup', 'Rice', 'Sandwich', 'Something else'])
+
+    def test_options_split_across_a_pause(self):
+        self.assertEqual(self.suggest('Do you want water, juice,', 'or milk?')['phrases'][:3], ['Water', 'Juice', 'Milk'])
+        self.assertEqual(self.suggest('Do you want water', 'juice or milk?')['phrases'][:3], ['Water', 'Juice', 'Milk'])
+        # A new question is not merged with the one before it.
+        self.assertEqual(self.suggest('Do you want water or juice?', 'Do you want red or blue?')['phrases'][:2], ['Red', 'Blue'])
+
     def test_options_keep_words_like_away_and_out(self):
         self.assertEqual(conversation.or_options('Is adding or taking away more fun?'), ['Adding', 'Taking away'])
         self.assertEqual(conversation.or_options('Do you want to go out or stay home?'), ['Go out', 'Stay'])
