@@ -12,7 +12,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from aac.history import time_bucket
 from aac.models import CommunicationEvent, PredictionRecord, Profile
 from aac.openapi import SCHEMAS
-from aac.predictions import DEFAULT_PHRASES, weight
+from aac.predictions import DEFAULT_PHRASES, predict_phrases, weight
 
 PREFERENCES = {'scan_interval_ms': 1500, 'input_modes': ['button', 'keyboard'], 'default_activity': 'play'}
 NOW = datetime(2026, 11, 14, 17, 0, tzinfo=timezone.utc)  # 12:00 in New York: midday
@@ -194,3 +194,20 @@ class LegacyPredictTests(TestCase):
             with self.subTest(changes=changes):
                 self.assertEqual(self.predict(**changes).status_code, 400)
         self.assertEqual(self.client.post('/api/predict', {}, content_type='application/json').status_code, 400)
+
+
+class FavoriteFallbackTests(TestCase):
+    def test_meals_include_food_and_drink_favorites_with_six_unique_choices(self):
+        phrases, source = predict_phrases([], 'lunch', 'midday', NOW,
+            {'foods': ['pears', 'pizza'], 'drinks': ['mango juice']})
+        self.assertEqual(phrases[:2], ['I want pears', 'I want mango juice'])
+        self.assertEqual(len({phrase.casefold() for phrase in phrases}), 6)
+        self.assertEqual(source, 'default')
+
+    def test_play_uses_activity_favorites_but_bedtime_does_not_push_food_or_toys(self):
+        favorites = {'foods': ['pears'], 'activities': ['puzzles']}
+        play, _ = predict_phrases([], 'play', 'afternoon', NOW, favorites)
+        bedtime, _ = predict_phrases([], 'bedtime', 'evening', NOW, favorites)
+        self.assertEqual(play[0], 'I want puzzles')
+        self.assertNotIn('I want puzzles', bedtime)
+        self.assertNotIn('I want pears', bedtime)

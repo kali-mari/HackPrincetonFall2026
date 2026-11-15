@@ -17,7 +17,7 @@ from .history import (
 )
 from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Profile
 from .llm import suggest_phrases
-from .predictions import predict_phrases, recent_spoken, validate_prediction_request
+from .predictions import personalize_phrases, predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
 from .speech import SpeechUnavailable, clip_seconds, synthesize
@@ -187,10 +187,11 @@ def predict(request):
             events = recent_spoken(patient)
         except DatabaseError:
             events = []  # Unavailable history still yields six defaults.
-        phrases, source = predict_phrases(events, activity, bucket, now)
-        suggested = suggest_phrases(activity, bucket, payload['recent'], phrases)
+        favorites = patient.preferences.get('favorites', {})
+        phrases, source = predict_phrases(events, activity, bucket, now, favorites)
+        suggested = suggest_phrases(activity, bucket, payload['recent'], phrases, favorites)
         if suggested:
-            phrases, source = suggested, 'ai'
+            phrases, source = personalize_phrases(suggested, activity, favorites), 'ai'
         # Attribution needs a saved record, so a failed save is not a success.
         record = PredictionRecord.objects.create(
             patient=patient, activity=activity, time_bucket=bucket, phrases=phrases, source=source,
@@ -353,13 +354,16 @@ def legacy_predict(request):
     except InvalidRequest as error:
         return error_response('invalid_request', str(error), 400)
     # The legacy contract has no error for missing setup or storage: fall back to defaults.
+    favorites = {}
     try:
         patient = Profile.objects.get(pk=settings.LEGACY_DEMO_PATIENT_ID, role=Profile.Role.PATIENT)
+        favorites = patient.preferences.get('favorites', {})
         events, bucket = recent_spoken(patient), time_bucket(now, patient.timezone)
     except (Profile.DoesNotExist, DatabaseError):
         events, bucket = [], None
-    phrases, _ = predict_phrases(events, activity, bucket, now)
-    return JsonResponse({'phrases': suggest_phrases(activity, bucket, payload['recent'], phrases) or phrases})
+    phrases, _ = predict_phrases(events, activity, bucket, now, favorites)
+    suggested = suggest_phrases(activity, bucket, payload['recent'], phrases, favorites)
+    return JsonResponse({'phrases': personalize_phrases(suggested, activity, favorites) if suggested else phrases})
 
 
 @csrf_exempt

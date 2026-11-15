@@ -143,6 +143,78 @@ The 17 backend listener tests also passed on both Mac and UNO Q, including a
 regression for a capture process stuck after SIGTERM. A fresh real start/stop
 cycle confirmed no active FFmpeg capture remained on either device after Stop.
 
+## Gemini predictions and local conversation choices
+
+Standard predictions use Google Gemini with time, activity, confirmed recent
+speech, and history-ranked phrases. Configure only `backend/.env` on the backend
+host:
+
+```dotenv
+PREDICT_PROVIDER=gemini
+PREDICT_MODEL=gemini-3.5-flash-lite
+PREDICT_TIMEOUT_SECONDS=2
+GEMINI_API_KEY=<your key, never commit or paste into chat>
+```
+
+The UNO Q network on this setup returned a TLS hostname mismatch for Google's
+API. Keep certificate verification enabled and use the Mac's working connection
+through this Gemini-only CONNECT tunnel:
+
+```sh
+python3 hardware/gemini_proxy.py
+"$ADB" -s <uno-q-id> reverse tcp:8767 tcp:8767
+```
+
+Also set `GEMINI_PROXY_URL=http://127.0.0.1:8767` in the UNO Q's `backend/.env`
+and restart the backend while preserving the Mac microphone `LISTEN_DEVICE`
+override above. The tunnel binds to Mac loopback and only accepts
+`generativelanguage.googleapis.com:443`. It forwards encrypted bytes, with TLS
+verified end to end; it never reads/logs credentials, prompts, or responses.
+Leave the proxy setting blank when running with working direct HTTPS.
+
+The live UNO Q provider returned six valid phrases in about 1.08 s and 0.64 s;
+a request to `/api/aac/predict` reported `source: ai` in about 0.75 s. Errors,
+invalid JSON/phrases, exhausted quota, or calls over two seconds retain exactly
+six history/default phrases. No retry or automatic model switching occurs.
+
+During caregiver listening, a rolling window of the latest three phrases stays
+in browser memory. Reviewed local topic matching supplies six conversation
+choices, such as drink replies after a juice offer. This matcher is deterministic;
+Gemini is used only for standard predictions, never for raw conversation context.
+The child explicitly chooses a suggestion before it is spoken. A chosen and
+successfully spoken phrase can then enter normal communication history.
+Stopping listening clears context and immediately restores standard suggestions.
+
+Live conversation verification: a juice topic switched the row to six reviewed
+drink choices without speaking or adding anything to the sentence strip. Stop
+cleared the transcript and restored the regular bedtime suggestions. Frontend
+build/lint and 22 tests passed; 12 hardware tests passed. The 32 AI/prediction
+backend tests passed on both Mac and UNO Q with mocked providers; separate live
+Gemini calls verified the real network and model configuration.
+
+## Favorite items stored with the patient
+
+Open **Input settings → Caregiver dashboard → Favorite items**. Enter one item
+per line in foods, drinks, and activities/toys, then choose **Save favorites**.
+These lists are stored under `Profile.preferences.favorites` in UNO Q SQLite,
+not browser storage. Each group allows 10 unique items of up to 60 characters.
+Clear its text box and save to clear a group. Other voice/input preferences are
+preserved. Existing profiles work without favorites; no migration is needed.
+
+Relevant favorites contribute at most two of the six regular prediction cards
+and personalize local conversation choices. Gemini also receives the explicit
+favorites as JSON context; raw conversation transcripts remain local. Spoken
+history is still collected separately and does not automatically become an
+explicit favorite. Return to the board after saving to refresh both modes.
+
+Verification: 174 backend tests passed on Mac and UNO Q, and 26 frontend tests,
+build, and lint passed. A temporary synthetic patient was created with favorite
+food/drink items; separate API requests read them from SQLite, duplicate updates
+were rejected without changing stored data, and a live Gemini result returned
+two relevant favorites among six choices in about 0.86 seconds. Slower calls
+retained personalized fallback choices. Temporary test patients were deleted;
+no favorite items were invented for the demo profile.
+
 ## Verification on this setup
 
 - Updated `main` and `codex/device-integration` to merged commit `594f992`.

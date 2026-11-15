@@ -118,6 +118,11 @@ def event_variant(kind):
 
 
 SCHEMAS = {
+    "FavoriteItems": obj(
+        {group: array(text(60), maxItems=10, uniqueItems=True)
+         for group in ("foods", "drinks", "activities")},
+        description="Explicit favorite items, stored locally with patient preferences. Items are trimmed, printable, and case-insensitively unique per group. Empty groups clear favorites; spoken frequency does not automatically create favorites.",
+    ),
     "Error": obj(
         {"error": obj({"code": text(80), "message": text(300)}, ("code", "message"))},
         ("error",),
@@ -135,6 +140,7 @@ SCHEMAS = {
             ),
             "default_activity": text(100),
             "voice_id": text(100),
+            "favorites": ref("FavoriteItems"),
         },
         ("scan_interval_ms", "input_modes", "default_activity"),
     ),

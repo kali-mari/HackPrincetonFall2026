@@ -61,7 +61,35 @@ def rank(events, now):
     return [text for _, (_, _, text) in ordered]
 
 
-def predict_phrases(events, activity, bucket, now):
+def favorite_phrases(favorites, activity):
+    """At most two explicit, context-relevant favorites; never learn from display."""
+    activity = normalize(activity)
+    groups = []
+    if activity in {'breakfast', 'lunch', 'dinner', 'snack', 'meal', 'mealtime'}:
+        groups = ['foods', 'drinks']
+    elif activity in {'drink', 'drinks', 'water break'}:
+        groups = ['drinks']
+    elif activity in {'play', 'recess', 'free time', 'after school'}:
+        groups = ['activities']
+    choices = [favorites.get(group, []) for group in groups]
+    # Round robin so a meal can offer one food and one drink.
+    items = [group_items[index] for index in range(2) for group_items in choices if len(group_items) > index]
+    return [f'I want {item}' for item in items[:2]]
+
+
+def personalize_phrases(phrases, activity, favorites):
+    """Keep a maximum of two favorites plus varied AI/history choices, exactly six."""
+    result, seen = [], set()
+    for phrase in [*favorite_phrases(favorites, activity), *phrases, *DEFAULT_PHRASES]:
+        if normalize(phrase) not in seen:
+            seen.add(normalize(phrase))
+            result.append(phrase)
+        if len(result) == PHRASE_COUNT:
+            break
+    return result
+
+
+def predict_phrases(events, activity, bucket, now, favorites=None):
     """Return (six phrases, source). Narrow context first, then broader, then defaults."""
     activity = normalize(activity)
     same_activity = [event for event in events if event.activity and normalize(event.activity) == activity]
@@ -81,8 +109,9 @@ def predict_phrases(events, activity, bucket, now):
                 seen.add(normalize(text))
                 phrases.append(text)
 
+    take(favorite_phrases(favorites or {}, activity))
     for tier in tiers:
         take(rank(tier, now))
-    source = 'history' if phrases else 'default'
+    source = 'history' if events else 'default'
     take(DEFAULT_PHRASES)
     return phrases, source

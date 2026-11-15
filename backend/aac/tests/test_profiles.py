@@ -144,6 +144,33 @@ class ProfileFeatureTests(TestCase):
             result = self.create_patient(preferences={**PREFERENCES, 'scan_interval_ms': interval})
             self.assertEqual(result['preferences']['scan_interval_ms'], interval)
 
+    def test_favorites_persist_with_profile_and_can_be_cleared(self):
+        favorites = {'foods': ['  pears  '], 'drinks': ['mango juice'], 'activities': ['puzzles']}
+        patient = self.create_patient(preferences={**PREFERENCES, 'favorites': favorites})
+        url = '/api/profile/patients/' + patient['id']
+        expected = {**favorites, 'foods': ['pears']}
+        self.assertEqual(self.assert_schema(self.client.get(url), 'Patient')['preferences']['favorites'], expected)
+        row = Profile.objects.get(pk=patient['id'])
+        self.assertEqual(row.preferences['favorites'], expected)
+        result = self.assert_schema(self.client.patch(url,
+            {'preferences': {**PREFERENCES, 'favorites': {}}}, content_type='application/json'), 'Patient')
+        self.assertEqual(result['preferences']['favorites'], {})
+
+    def test_invalid_favorites_do_not_change_stored_preferences(self):
+        patient = self.create_patient()
+        url = '/api/profile/patients/' + patient['id']
+        for favorites in (None, [], {'other': []}, {'foods': 'pizza'}, {'drinks': [True]},
+                          {'foods': ['']}, {'foods': ['x' * 61]}, {'drinks': ['tea', ' TEA ']},
+                          {'foods': ['two\nlines']}, {'activities': [str(i) for i in range(11)]}):
+            with self.subTest(favorites=favorites):
+                self.error(self.client.patch(url, {'preferences': {**PREFERENCES, 'favorites': favorites}},
+                                             content_type='application/json'))
+        self.assertEqual(self.assert_schema(self.client.get(url), 'Patient')['preferences'], PREFERENCES)
+        row = Profile.objects.get(pk=patient['id'])
+        row.preferences = {**PREFERENCES, 'favorites': {'foods': ['pizza', 'Pizza']}}
+        with self.assertRaises(ValidationError):
+            row.save()
+
     def test_role_scoped_read_update_delete_and_list(self):
         for identifier in (self.caregiver.pk, uuid4()):
             url = f'/api/profile/patients/{identifier}'

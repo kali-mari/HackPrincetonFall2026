@@ -55,12 +55,30 @@ Example patient creation:
   "preferences": {
     "scan_interval_ms": 1500,
     "input_modes": ["button", "keyboard"],
-    "default_activity": "play"
+    "default_activity": "play",
+    "favorites": {
+      "foods": ["pizza"],
+      "drinks": ["apple juice"],
+      "activities": ["blocks"]
+    }
   }
 }
 ```
 
 Return the created profile with `id`, `role: "patient"`, submitted setup, `created_at`, and `updated_at`. Patient deletion must also invalidate cached/active learning artifacts. Define caregiver deletion and link-management endpoints later if needed; do not expand the demo just for CRUD completeness.
+
+`preferences.favorites` is optional and lives in the existing SQLite `Profile`
+JSON column. Each of `foods`, `drinks`, and `activities` can contain up to 10
+explicit items, at most 60 characters each. Values are trimmed, single-line,
+printable, and case-insensitively unique within a group. Empty groups clear items.
+The example above is synthetic; seed setup does not invent favorites for an
+existing profile. Spoken and selected choices remain `CommunicationEvent` rows;
+frequency does not automatically mark an item as a favorite.
+
+Favorites can be edited in the caregiver dashboard or through the existing
+profile API. They personalize deterministic fallback, Gemini context, and local
+conversation choices. The existing whole-object preferences PATCH rule still
+applies, so clients must preserve input/voice settings when updating favorites.
 
 ### `/api/aac`: interactive communication
 
