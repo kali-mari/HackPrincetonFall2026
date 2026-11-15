@@ -1,0 +1,5 @@
+# Linux UNO Q only. Use with compose.yaml when Conversation Mode needs a mic.
+services:
+  inference:
+    devices: [/dev/snd:/dev/snd]
+    group_add: ['${AAC_AUDIO_GID:-29}']

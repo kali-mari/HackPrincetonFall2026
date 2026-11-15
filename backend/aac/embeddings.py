@@ -67,6 +67,12 @@ def enabled():
 
 def embed(texts):
     """Unit vectors for texts. Loads the model on first use; raises EmbeddingUnavailable."""
+    if settings.INFERENCE_SOCKET and enabled():
+        from .inference_client import request, InferenceUnavailable
+        try:
+            return request({'op': 'embed', 'texts': list(texts)})['vectors']
+        except InferenceUnavailable:
+            raise EmbeddingUnavailable('Local embedding service is unavailable.') from None
     loader = PROVIDERS.get(settings.EMBED_PROVIDER)
     if loader is None:
         raise EmbeddingUnavailable('Embeddings are not configured.')

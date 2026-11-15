@@ -217,4 +217,9 @@ seed/                       Synthetic demo history loaded by seed_demo
 media/audio/                Ignored generated audio
 ```
 
+UNO Q container deployment, persistent SQLite/audio storage, and the private
+same-device inference service are documented in [deployment.md](../docs/deployment.md).
+`requirements-web.txt` and `requirements-inference.txt` separate container dependencies;
+`requirements.txt` continues to install the full environment for local development.
+
 Next backend slice: Phase 7 labels; the bridge and buttons are in `hardware/`.

@@ -75,6 +75,19 @@ class RuntimeSettingsTests(SimpleTestCase):
         self.assertEqual(values['MEDIA_ROOT'], BACKEND_DIR / 'data/media')
         self.assertEqual(values['STATIC_ROOT'], BACKEND_DIR / 'data/static')
 
+    def test_deployment_origins_and_same_device_inference(self):
+        self.assertEqual(self.read_settings()['INFERENCE_SOCKET'], '')
+        values = self.read_settings({
+            'DJANGO_ALLOWED_ORIGINS': ' http://localhost:5173/, http://192.0.2.1:5173, ,',
+            'INFERENCE_SOCKET': '/run/aac/inference.sock',
+        })
+        self.assertEqual(values['CORS_ALLOWED_ORIGINS'],
+                         ['http://localhost:5173', 'http://192.0.2.1:5173'])
+        self.assertEqual(values['INFERENCE_SOCKET'], '/run/aac/inference.sock')
+        for value in ('http://remote.example/infer', 'relative/inference.sock'):
+            with self.subTest(value=value), self.assertRaises(ImproperlyConfigured):
+                self.read_settings({'INFERENCE_SOCKET': value})
+
     def test_speech_and_casting_settings(self):
         values = self.read_settings()
         self.assertEqual((values['SPEECH_PROVIDER'], values['SPEECH_VOICE_ID'], values['SPEECH_MODEL_ID']),

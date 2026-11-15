@@ -1,0 +1,16 @@
+# Adjust checkout/venv paths. Do not run alongside another aac_token bridge.
+[Unit]
+Description=Smart AAC UNO Q button and LCD bridge
+After=docker.service arduino-router.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=arduino
+WorkingDirectory=/home/arduino/HackPrincetonFall2026
+ExecStart=/home/arduino/HackPrincetonFall2026/hardware/.venv/bin/python hardware/unoq_bridge.py --ws-url ws://127.0.0.1:8000/ws/input/
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
