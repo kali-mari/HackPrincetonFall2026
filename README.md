@@ -1,4 +1,4 @@
-# SaySo: Smart AAC Board
+# SaySo
 > **HackPrinceton Fall 2026**  
 > *A low-cost, open-source, privacy-first physical computing AAC (Augmentative and Alternative Communication) platform empowering nonverbal individuals through tactile hardware, on-device intelligence, and Google Gemini.*
 
@@ -131,7 +131,7 @@ flowchart TD
 1. **Ambient Turn-Taking:** The caregiver asks a question. Holding `PREV + NEXT` toggles Listen Mode; on-device NLP parses the question and automatically populates the candidate choices.
 2. **Context-Aware Suggestions:** Even without speech input, the board automatically updates its prediction row based on the time of day and schedule (breakfast in the morning, bedtime stories at night).
 3. **Physical Selection:** The child navigates through the tiles or prediction row using physical buttons, with visual and audible feedback.
-4. **Room-Scale Audibility:** Spoken sentences play on device speakers or cast directly to an in-room Google Home smart speaker so everyone can hear.
+4. **Room-Scale Audibility:** Spoken sentences play on device speakers so everyone can hear.
 
 ---
 
@@ -198,3 +198,8 @@ python hardware/bridge.py --port <SERIAL_PORT>
 
 - **Mulberry Symbols:** Symbol pictures in `frontend/public/symbols/` are from the [Mulberry Symbols](https://github.com/mulberrysymbols/mulberry-symbols) set, copyright 2018–2026 Steve Lee, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - **Atkinson Hyperlegible Font:** Developed by the Braille Institute of America to maximize legibility and visual accessibility.
+
+## 👥 Contributers
+- Nirmal Shah
+- Carlos Mendez
+- Kalista Oberes
