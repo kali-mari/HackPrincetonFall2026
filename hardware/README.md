@@ -6,6 +6,13 @@ The Elegoo UNO R3 (an Arduino Uno clone) reads five buttons and an optional soun
 - `test/test.ino`: wiring check. It prints friendly messages and live sound levels, not the protocol.
 - `bridge.py`: serial to WebSocket bridge.
 
+For the two-board USB setup (Mac bridge/frontend, UNO Q backend/SQLite), see
+[device testing](../docs/device-testing.md).
+
+`mac_mic.py` optionally supplies the MacBook microphone to UNO Q caregiver Listen
+mode through a local USB tunnel. It captures only during an active listening
+session; see the same guide for setup. This is separate from the A0 vocal switch.
+
 ## Wiring
 
 Buttons use `INPUT_PULLUP`: wire each one between its pin and GND (pressed = LOW). No resistors needed.
@@ -39,7 +46,7 @@ At the top of the sketch:
 - `SOUND_HOLD_MS`: how long the sound must last before `VOICE` fires (500 ms).
 - `SOUND_GAP_MS`: dips shorter than this don't reset the timer, and after firing the level must stay quiet this long before the switch can fire again.
 
-Set `DEBUG = true` to print `# sound <level>` once a second while you tune the threshold (the bridge ignores those lines). Set it back to `false` before the demo. Without a sound sensor, set `SOUND_THRESHOLD` to 1024 to turn the vocal switch off, so a floating A0 pin can't fire `VOICE`.
+Set `DEBUG = true` to print `# sound <level>` once a second while you tune the threshold (the bridge ignores those lines). Set it back to `false` before the demo. The default `SOUND_THRESHOLD` is 1024, which disables the vocal switch so a floating A0 pin can't fire `VOICE`. Lower it only after connecting and calibrating a sound sensor.
 
 ### Listen chord
 

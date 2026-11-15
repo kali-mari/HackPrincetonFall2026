@@ -71,8 +71,9 @@ class SuggestPhrasesTests(SimpleTestCase):
         self.assertEqual(system, llm.SYSTEM)
         self.assertEqual(model, 'test-model')
         self.assertEqual(json.loads(prompt), {
-            'activity': 'lunch', 'time_of_day': 'midday', 'sentence_so_far': ['I want'],
+            'activity': 'lunch', 'time_of_day': 'midday', 'recent_spoken_phrases': ['I want'],
             'frequent_phrases': list(DEFAULT_PHRASES[:6]),
+            'favorite_items': {},
         })
 
     def test_failures_return_none_without_logging_content(self):
@@ -139,6 +140,28 @@ class PredictRouteAITests(TestCase):
         data = self.predict(Mock(side_effect=TimeoutError)).json()
         self.assertEqual((data['phrases'][0], data['source']), ('Pizza please', 'history'))
 
+    def test_favorites_enter_ai_context_and_keep_six_varied_choices(self):
+        favorites = {'foods': ['pears'], 'drinks': ['mango juice']}
+        self.patient.preferences = {**self.patient.preferences, 'favorites': favorites}
+        self.patient.save()
+        provider = Mock(return_value=reply())
+        data = self.predict(provider).json()
+        self.assertEqual(json.loads(provider.call_args.args[1])['favorite_items'], favorites)
+        self.assertEqual(data['phrases'][:2], ['I want pears', 'I want mango juice'])
+        self.assertEqual(len(set(data['phrases'])), 6)
+        self.assertEqual(data['source'], 'ai')
+        self.patient = make_patient(name='Another patient')
+        self.predict(provider)
+        self.assertEqual(json.loads(provider.call_args.args[1])['favorite_items'], {})
+
+    def test_provider_failure_retains_contextual_favorites_without_inventing_events(self):
+        self.patient.preferences = {**self.patient.preferences, 'favorites': {'foods': ['pears']}}
+        self.patient.save()
+        before = self.patient.events.count()
+        data = self.predict(Mock(side_effect=TimeoutError)).json()
+        self.assertEqual(data['phrases'][0], 'I want pears')
+        self.assertEqual(self.patient.events.count(), before)
+
     def test_legacy_route_keeps_its_shape(self):
         with override_settings(LEGACY_DEMO_PATIENT_ID=self.patient.pk):
             self.assertEqual(self.predict(Mock(return_value=reply()), '/api/predict').json(),
@@ -184,6 +207,28 @@ class ProviderRequestTests(SimpleTestCase):
         config = kwargs['config']
         self.assertEqual((config.system_instruction, config.response_mime_type, config.max_output_tokens),
                          ('sys', 'application/json', llm.MAX_OUTPUT_TOKENS))
+        self.assertEqual(config.response_json_schema, llm.PHRASES_SCHEMA)
+
+    def test_gemini_flash_lite_uses_minimal_thinking(self):
+        from google.genai import types
+        client = Mock()
+        client.models.generate_content.return_value = SimpleNamespace(text=reply())
+        with patch.object(llm, 'gemini_client', return_value=client):
+            self.assertEqual(llm.gemini_provider('sys', 'data', 'gemini-3.5-flash-lite'), reply())
+        config = client.models.generate_content.call_args.kwargs['config']
+        self.assertEqual(config.thinking_config.thinking_level, types.ThinkingLevel.MINIMAL)
+
+    def test_gemini_usb_proxy_keeps_retry_count_bounded(self):
+        llm.gemini_client.cache_clear()
+        try:
+            with patch.dict('os.environ', {'GEMINI_PROXY_URL': 'http://127.0.0.1:8767'}), \
+                    patch('google.genai.Client') as constructor:
+                llm.gemini_client()
+            options = constructor.call_args.kwargs['http_options']
+            self.assertEqual(options.client_args, {'proxy': 'http://127.0.0.1:8767'})
+            self.assertEqual(options.retry_options.attempts, 1)
+        finally:
+            llm.gemini_client.cache_clear()
 
     def test_bedrock(self):
         client = Mock()

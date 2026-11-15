@@ -15,14 +15,20 @@
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | `WS /ws/conversation/` | Implemented: caregiver listen mode. On-device mic capture, voice detection and transcription; numbered phrases to the one connection that started it (`aac/listen.py`, `aac/consumers.py`) |
-| Conversation Mode topic timeline and suggestions | Stretch design only; no contract yet |
+| Conversation Mode topic timeline and suggestions | Six local browser suggestions implemented from the rolling transcript; saved timeline remains stretch design, with no contract |
 
-The **contract/documentation layer, HTTP route scaffolds, profile operations and event history** deterministic predictions and speech are implemented; AI integration is not. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
+The **contract/documentation layer, HTTP route scaffolds, profile operations, event history, deterministic/AI predictions and speech** are implemented. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
 ### Profile operations (implemented)
 
 - `POST /api/profile/caregivers`, `POST /api/profile/patients` (creates the patient and its caregiver link atomically), `GET /api/profile/caregivers/{id}/patients`, and `GET`/`PATCH`/`DELETE /api/profile/patients/{id}`.
 - Request and normal success shapes match the original contract. Unknown/missing fields, blank or oversized strings, invalid IANA timezones, `language` other than `en`, and invalid `preferences` return 400. `PATCH` replaces `preferences` as a whole object. Role, ID and caregiver link are not editable.
+- **Optional favorites:** `preferences.favorites` accepts `foods`, `drinks`, and
+  `activities`, each a list of up to 10 printable single-line items of at most
+  60 characters. Items are trimmed and case-insensitively unique per group.
+  Unknown groups, nulls, wrong types, and duplicate/oversized items return 400
+  without changing the profile. Empty groups or `{}` clear favorites. This uses
+  the existing SQLite profile JSON column and needs no migration or new route.
 - A caregiver ID used as a patient ID (or the reverse) is 404, like an unknown ID.
 - Patient lists use ascending UUID order with a signed opaque cursor bound to the caregiver; a tampered, repeated or other-caregiver cursor is 400. The last page returns `next_cursor: null` (no empty terminal page).
 - **Additive 503:** all six profile operations may return `503 { "error": { "code": "unavailable", "message": "Profile storage is unavailable." } }` when SQLite is unavailable (for example, an unmigrated or unwritable database). Writes roll back; database details are never included.
@@ -45,9 +51,17 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 - Evidence is the patient's confirmed `spoken` events only (latest 1,000); selections, feedback, displayed suggestions and `recent` are not evidence. Other patients' history is never used.
 - Each event adds `0.5 ** (max(0, age_days) / 7)` to its phrase, with age measured from the request `time`. Phrases merge after trim/case-fold; the newest spelling is shown.
 - Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
+- Up to two context-relevant explicit favorite phrases precede those tiers:
+  food/drink items at meals, drinks during drink activities, and activity/toy
+  items during play. Unrelated favorites do not displace bedtime choices. The
+  final result is always six case-insensitively unique phrases. A valid AI result
+  is blended with the same maximum of two relevant favorites before it is saved
+  or returned, leaving at least four other choices.
 - Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
-- `source` is `history` when any phrase came from history, otherwise `default`. `artifact_version` is always null for now.
-- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent` and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output replaces the phrases and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Response shapes are unchanged, and `recent` is still never stored.
+- Without AI, `source` is `history` when spoken history is available, otherwise
+  `default` (including a favorite-personalized default). `artifact_version` is
+  always null for now.
+- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent`, the patient's explicit `favorite_items`, and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output is personalized as above and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Prediction response shapes are unchanged, and `recent` is still never stored. Other patients' favorites and raw conversation context are never included.
 - `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
 - `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 
@@ -182,7 +196,7 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 
 ## Listen mode WebSocket (`WS /ws/conversation/`)
 
-Caregiver listen mode turns nearby speech into text on the UNO Q. The microphone is attached to the board and recorded by the backend; no audio or text leaves the device, and nothing is stored or logged. The `LISTEN` input above stays the toggle: when the frontend receives it, it sends `start` or `stop` on this socket.
+Caregiver listen mode turns nearby speech into text on the UNO Q. Normally the microphone is attached to the board and recorded by the backend. The optional MacBook demo source streams microphone audio over a local USB ADB tunnel instead; see [device testing](device-testing.md). Neither topology uses hosted transcription or persists audio/transcripts. The `LISTEN` input above stays the toggle: when the frontend receives it, it sends `start` or `stop` on this socket.
 
 Client to server, JSON text frames:
 
@@ -206,7 +220,16 @@ Server to client:
 - If the transcription model falls behind, the oldest waiting phrase is dropped (logged without content).
 - Browser origin rules are the same as `/ws/input/`. Clients that send no `Origin` header (scripts) are allowed.
 - While the board speaks, listening hears silence. Each successful `POST /api/speak` or `/api/aac/speak` blanks the microphone for the clip's length plus 1.5 s (4 s when casting to the Google Home), so the board's own voice is not transcribed. A phrase in progress ends normally. The frontend's backup voice (browser speech when `/api/speak` fails) does not go through the backend: send `stop` before it and `start` after.
-- Not covered yet: topic detection and conversation suggestions.
+- The frontend keeps up to three bounded phrases in memory and matches reviewed
+  local topics (drinks, food, play, feelings, bathroom, school, bedtime). A known
+  topic supplies exactly six curated choices to the prediction row. Unknown topics
+  keep the normal time/activity/history/AI suggestions. This is deterministic local
+  matching, not a hosted model call; no new WebSocket message is needed.
+- Displaying a suggestion never selects, speaks, logs, or confirms it. New context
+  clears an active prediction-row scan so a different phrase cannot silently replace
+  the current selection. Stop, playback pause, disconnect, and errors clear context.
+- Not covered yet: a local generative reply model, saved topic timelines, or learning
+  from unselected suggestions. Raw transcripts remain memory-only.
 
 The schema includes `InputMessage` and an `x-websocket` extension for `/ws/input/`, and `ConversationClientMessage`, `ConversationServerMessage` and an `x-websocket-conversation` extension for `/ws/conversation/`. Swagger does not test a WebSocket handshake or streaming behavior.
 

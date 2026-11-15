@@ -103,10 +103,20 @@ Casting (`aac/casting.py`, PyChromecast) connects straight to `GOOGLE_HOME_HOST`
 | --- | --- | --- | --- |
 | OpenAI, or any OpenAI-compatible API | `openai` | `OPENAI_API_KEY` (+ `OPENAI_BASE_URL` for OpenRouter, Groq, xAI, Mistral, Ollama, ...) | required |
 | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | optional, defaults to `claude-haiku-5-5` |
-| Google Gemini | `gemini` | `GEMINI_API_KEY` | required |
+| Google Gemini | `gemini` | `GEMINI_API_KEY` | optional, defaults to `gemini-3.5-flash-lite` |
 | Amazon Bedrock (any Converse text model) | `bedrock` | standard AWS credentials (`aws login`, `AWS_PROFILE`, keys) and `AWS_REGION` | required: model or inference profile ID |
 
 Blank `PREDICT_PROVIDER` turns AI off. Pick a fast model ID from your provider's model list: answers slower than `PREDICT_TIMEOUT_SECONDS` (default 2) are dropped, and reasoning-heavy models often miss that. Only the selected provider's SDK is imported.
+
+Gemini requests use a JSON schema requiring exactly six phrases and minimal
+thinking on Gemini 3 models, with SDK retries disabled. Google documents
+[Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite) as a
+low-latency model with structured output support. The parser still checks length,
+uniqueness, and printable text before accepting a response.
+If UNO Q cannot reach Google over verified HTTPS, the USB demo can set
+`GEMINI_PROXY_URL=http://127.0.0.1:8767` with the restricted local tunnel in
+`hardware/gemini_proxy.py`; see [device testing](../docs/device-testing.md).
+This does not disable TLS verification or send conversation transcripts to Gemini.
 
 A provider is a function `(system, prompt, model) -> text` that raises on failure; register it in `PROVIDERS`. The rest is shared: the history/default phrases are computed first and sent with `activity`, time bucket and `recent` as JSON data; the call runs on a small thread pool and the view waits at most the deadline (SDK timeouts are only a 10-second safeguard, and SDK retries are off). Output must be exactly six unique, nonblank, single-line phrases of at most 100 characters, otherwise the fallback is used; there is no repair call. At most 4 calls run at once, so a slow provider can't pile up threads. Prompts, responses and keys are never logged.
 

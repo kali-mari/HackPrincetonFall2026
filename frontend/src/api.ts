@@ -59,6 +59,33 @@ export type LogEvent = { event_id: string; kind: string; text: string; timestamp
 
 export const DEMO_PATIENT_ID = '22222222-2222-4222-8222-222222222222' // LEGACY_DEMO_PATIENT_ID: where POST /api/log writes
 
+export type FavoriteItems = { foods?: string[]; drinks?: string[]; activities?: string[] }
+export type PatientPreferences = {
+  scan_interval_ms: number
+  input_modes: ('button' | 'keyboard')[]
+  default_activity: string
+  voice_id?: string
+  favorites?: FavoriteItems
+}
+
+export async function patientPreferences(): Promise<PatientPreferences> {
+  const res = await fetch(`/api/profile/patients/${DEMO_PATIENT_ID}`, { signal: AbortSignal.timeout(10_000) })
+  if (!res.ok) throw new Error(`Patient preferences failed with ${res.status}`)
+  return ((await res.json()) as { preferences: PatientPreferences }).preferences
+}
+
+export async function saveFavorites(favorites: FavoriteItems): Promise<FavoriteItems> {
+  // PATCH replaces the whole preferences object: reread it so input/voice settings survive.
+  const preferences = await patientPreferences()
+  const res = await fetch(`/api/profile/patients/${DEMO_PATIENT_ID}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preferences: { ...preferences, favorites } }),
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!res.ok) throw new Error(`Saving favorites failed with ${res.status}`)
+  return ((await res.json()) as { preferences: PatientPreferences }).preferences.favorites ?? {}
+}
+
 // Newest first. shortcut: one page of 100 events, page with next_cursor if a day ever exceeds that.
 export async function events(): Promise<LogEvent[]> {
   const path = `/api/aac/patients/${DEMO_PATIENT_ID}/events?limit=100`

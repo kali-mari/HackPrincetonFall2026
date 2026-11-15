@@ -19,6 +19,8 @@ class Profile(models.Model):
     display_name = models.CharField(max_length=80)
     timezone = models.CharField(max_length=100, null=True, blank=True)
     language = models.CharField(max_length=35, null=True, blank=True)
+    # Validated patient settings, including explicit categorized favorite items.
+    # Kept in SQLite with the profile; spoken/selected choices remain events.
     preferences = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

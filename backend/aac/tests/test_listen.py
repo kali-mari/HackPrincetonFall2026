@@ -1,6 +1,8 @@
 """Listen mode: the Listener pipeline and WS /ws/conversation/; no model, mic or network."""
 
 import sys
+import subprocess
+import time
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -117,6 +119,25 @@ class ListenerTest(SimpleTestCase):
             release.set()
             listener.process.wait(5)
         self.assertEqual((texts, ends), ([], []))
+
+    def test_stop_reaps_capture_even_when_sigterm_cannot_finish(self):
+        # Models a capture tool stuck flushing stdout after the reader stops.
+        command = [sys.executable, '-u', '-c',
+                   'import signal,sys,time; signal.signal(signal.SIGTERM, lambda *a: None); '
+                   'sys.stdout.write("ready\\n"); sys.stdout.flush(); time.sleep(30)']
+        listener = Listener(None, None)
+        listener.process = subprocess.Popen(command, stdout=subprocess.PIPE)
+        try:
+            self.assertEqual(listener.process.stdout.readline(), b'ready\n')
+            started = time.monotonic()
+            listener.stop()
+            self.assertLess(time.monotonic() - started, 3)
+            self.assertIsNotNone(listener.process.returncode)
+        finally:
+            if listener.process.poll() is None:
+                listener.process.kill()
+            listener.process.wait()
+            listener.process.stdout.close()
 
     def test_pause_feeds_silence_instead_of_the_microphone(self):
         heard = []

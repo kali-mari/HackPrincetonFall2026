@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { activityAt, logSentence, predict, speak } from './api'
+import { activityAt, logSentence, patientPreferences, predict, speak, type FavoriteItems } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
 import { EMPTY_STRIP, addWords, clearStrip, deleteLast as deleteFromStrip } from './sentence'
 import { useSwitchInput, type Action, type Source, type SourceSettings } from './useSwitchInput'
 import { useVoiceSwitch } from './useVoiceSwitch'
+import { useConversation } from './useConversation'
+import { conversationSuggestions } from './conversationSuggestions'
 import styles from './App.module.css'
 import tileStyles from './components/Tile.module.css'
 
@@ -117,13 +119,18 @@ export default function App() {
   const [sources, setSources] = useState(loadSettings)
   const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
   const [sensitivity, setSensitivity] = useState(loadSensitivity)
-  const [listening, setListening] = useState(false)
+  const conversation = useConversation(() => setScan((value) => value?.group === 1 ? null : value))
+  const listening = conversation.phase === 'listening'
+  const showConversation = conversation.active || Boolean(conversation.error)
   const [started, setStarted] = useState(false) // Chrome plays no sound until someone taps the page once
   const settingsDialog = useRef<HTMLDialogElement>(null)
   const clockDialog = useRef<HTMLDialogElement>(null)
   const clockInput = useRef<HTMLInputElement>(null)
   // Blank until the first reply, so a dead backend never hides behind made-up phrases.
-  const [predictions, setPredictions] = useState(BLANK_PREDICTIONS)
+  const [regularPredictions, setRegularPredictions] = useState(BLANK_PREDICTIONS)
+  const [favorites, setFavorites] = useState<FavoriteItems>({})
+  const localSuggestions = listening ? conversationSuggestions(conversation.segments, favorites) : null
+  const predictions = localSuggestions?.phrases ?? regularPredictions
   const [activity, setActivity] = useState('')
   const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
   const [recent, setRecent] = useState<string[]>([]) // last 3 sentences spoken this session
@@ -176,22 +183,26 @@ export default function App() {
         time.setHours(hours, minutes, 0, 0)
       }
       setActivity(activityAt(time))
-      try {
-        const result = await predict(time, recent)
-        // A newer fetch has started, so this slow reply must not overwrite it.
-        if (stale) return
-        setPredictions(result.phrases)
-      } catch (err) {
+      const [prediction, profile] = await Promise.allSettled([predict(time, recent), patientPreferences()])
+      if (stale) return
+      if (profile.status === 'fulfilled') setFavorites(profile.value.favorites ?? {})
+      if (prediction.status === 'fulfilled') {
+        setRegularPredictions(prediction.value.phrases)
+        setScan((value) => value?.group === 1 ? null : value)
+      } else {
         // Keep the previous real phrases; the fallback fills the row only if none ever arrived.
-        console.error('Predictions failed; showing the previous or fallback phrases.', err)
-        if (!stale) setPredictions((p) => (p[0] ? p : FALLBACK_PREDICTIONS))
+        console.error('Predictions failed; showing the previous or fallback phrases.', prediction.reason)
+        setRegularPredictions((p) => (p[0] ? p : FALLBACK_PREDICTIONS))
       }
     }
     refresh()
     const timer = setInterval(refresh, PREDICT_EVERY_MS)
+    const onRoute = () => { if (!onCaregiverPage()) void refresh() }
+    window.addEventListener('hashchange', onRoute)
     return () => {
       stale = true
       clearInterval(timer)
+      window.removeEventListener('hashchange', onRoute)
     }
   }, [demoTime, recent])
 
@@ -199,6 +210,7 @@ export default function App() {
   async function say(sentenceText: string, fromStrip: boolean) {
     if (!sentenceText || speaking) return
     setSpeaking(true)
+    await conversation.pause()
     let playedLocally = !playOnHome
     try {
       try {
@@ -220,6 +232,7 @@ export default function App() {
       return
     } finally {
       setSpeaking(false)
+      conversation.resume()
     }
     if (fromStrip) setStrip((s) => ({ ...s, words: [] }))
     // Only confirmed local playback counts as spoken (api-contracts.md event lifecycle); a cast is unconfirmed.
@@ -295,7 +308,7 @@ export default function App() {
       const [first, second] = chord.current
       if (second && now - first.at < CHORD_MS) setScan(first.state)
       chord.current = []
-      setListening((l) => !l)
+      conversation.toggle()
       return
     }
     chord.current = []
@@ -307,7 +320,7 @@ export default function App() {
   // The board stays mounted under the caregiver page so its state survives; it ignores input there.
   const { connected, flash, showFlash } = useSwitchInput(sources, (action, now) => onCaregiverPage() || act(action, now))
   // Per the contract, voice always means SELECT. Higher sensitivity is a lower level threshold.
-  const voice = useVoiceSwitch(sources.voice, 1 - sensitivity, () => {
+  const voice = useVoiceSwitch(sources.voice && !conversation.active && !speaking, 1 - sensitivity, () => {
     // While the settings dialog is open the caregiver is tuning the slider: flash for feedback, but don't select behind it.
     if (!onCaregiverPage() && !document.querySelector('dialog[open]')) act('SELECT', performance.now())
     showFlash('voice')
@@ -343,7 +356,10 @@ export default function App() {
     <div className={styles.viewport}>
       <main
         className={styles.board}
-        style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
+        style={{
+          top: showConversation ? 'calc(50% + 76px)' : undefined,
+          transform: `translate(-50%, -50%) scale(${showConversation ? Math.max(0.1, Math.min(scale, (window.innerHeight - 152) / BOARD_HEIGHT)) : scale})`,
+        }}
         onPointerDown={() => setScan(null)}
       >
         <h1 className={styles.visuallyHidden}>Smart AAC Board</h1>
@@ -461,7 +477,7 @@ export default function App() {
               </svg>
             </button>
           </div>
-          {/* State only for now; speech-to-text is not built yet. */}
+          {/* Only show Listening after the UNO Q confirms it. */}
           {listening && (
             <p className={styles.listening} role="status">
               Listening
@@ -477,6 +493,16 @@ export default function App() {
           </p>
         </div>
       </main>
+
+      {showConversation && (
+        <aside className={styles.conversation} aria-label="Caregiver listen mode">
+          <div role="status" aria-live="polite">
+            <strong>{conversation.error ? 'Listening unavailable' : conversation.phase === 'paused' ? 'Listening paused while speaking' : listening ? `Listening${localSuggestions ? ` · ${localSuggestions.topic} suggestions` : ''}` : 'Starting listening…'}</strong>
+            <p>{conversation.error || conversation.transcript || 'Speak a short phrase, then pause. Text stays here only while listening.'}</p>
+          </div>
+          <button onClick={() => void conversation.stop()}>{conversation.error ? 'Dismiss' : 'Stop listening'}</button>
+        </aside>
+      )}
 
       <dialog ref={clockDialog} className={styles.dialog} aria-labelledby="clock-title">
         <h2 id="clock-title">Demo clock</h2>
@@ -505,6 +531,12 @@ export default function App() {
       <dialog ref={settingsDialog} className={styles.dialog} aria-labelledby="settings-title">
         <h2 id="settings-title">Input settings</h2>
         <p>Choose which switches can move the highlight.</p>
+        <button className={styles.secondary} onClick={() => {
+          conversation.toggle()
+          settingsDialog.current?.close()
+        }}>
+          {conversation.active ? 'Stop caregiver listening' : 'Start caregiver listening'}
+        </button>
         {SOURCES.map((s) => (
           <label key={s.id} className={styles.source}>
             <input type="checkbox" checked={sources[s.id]} onChange={() => toggleSource(s.id)} />
@@ -555,7 +587,10 @@ export default function App() {
         <button className={styles.close} onClick={() => settingsDialog.current?.close()}>
           Done
         </button>
-        <button className={styles.secondary} onClick={() => (location.hash = '#/caregiver')}>
+        <button className={styles.secondary} onClick={() => {
+          settingsDialog.current?.close()
+          location.hash = '#/caregiver'
+        }}>
           Caregiver dashboard
         </button>
       </dialog>
