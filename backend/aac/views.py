@@ -17,7 +17,7 @@ from .history import (
 )
 from .models import CaregiverPatient, CommunicationEvent, PredictionRecord, Profile
 from .llm import suggest_phrases
-from .predictions import personalize_phrases, predict_phrases, recent_spoken, validate_prediction_request
+from .predictions import predict_phrases, recent_spoken, validate_prediction_request
 from .profile_validation import PATIENT_FIELDS, validate_patient_setup
 from .profiles import patient_cursor, profile_json, read_patient_cursor
 from .speech import SpeechUnavailable, clip_seconds, synthesize
@@ -188,10 +188,9 @@ def predict(request):
         except DatabaseError:
             events = []  # Unavailable history still yields six defaults.
         favorites = patient.preferences.get('favorites', {})
-        phrases, source = predict_phrases(events, activity, bucket, now, favorites)
-        suggested = suggest_phrases(activity, bucket, payload['recent'], phrases, favorites)
-        if suggested:
-            phrases, source = personalize_phrases(suggested, activity, favorites), 'ai'
+        # The hosted model (if any) sees only activity and time of day; patient data stays here.
+        generic = suggest_phrases(activity, bucket)
+        phrases, source = predict_phrases(events, activity, bucket, now, favorites, generic)
         # Attribution needs a saved record, so a failed save is not a success.
         record = PredictionRecord.objects.create(
             patient=patient, activity=activity, time_bucket=bucket, phrases=phrases, source=source,
@@ -361,9 +360,8 @@ def legacy_predict(request):
         events, bucket = recent_spoken(patient), time_bucket(now, patient.timezone)
     except (Profile.DoesNotExist, DatabaseError):
         events, bucket = [], None
-    phrases, _ = predict_phrases(events, activity, bucket, now, favorites)
-    suggested = suggest_phrases(activity, bucket, payload['recent'], phrases, favorites)
-    return JsonResponse({'phrases': personalize_phrases(suggested, activity, favorites) if suggested else phrases})
+    phrases, _ = predict_phrases(events, activity, bucket, now, favorites, suggest_phrases(activity, bucket))
+    return JsonResponse({'phrases': phrases})
 
 
 @csrf_exempt

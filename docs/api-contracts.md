@@ -56,18 +56,17 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 
 - Evidence is the patient's confirmed `spoken` events only (latest 1,000); selections, feedback, displayed suggestions and `recent` are not evidence. Other patients' history is never used.
 - Each event adds `0.5 ** (max(0, age_days) / 7)` to its phrase, with age measured from the request `time`. Phrases merge after trim/case-fold; the newest spelling is shown.
-- Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
+- Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then optional generic AI phrases, then word-bank phrases for the activity (`backend/aac/wordbank.json`: meals use food and drink, play uses play, bedtime uses bedtime; other activity names match topic keywords), then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
 - Up to two context-relevant explicit favorite phrases precede those tiers:
   food/drink items at meals, drinks during drink activities, and activity/toy
   items during play. Unrelated favorites do not displace bedtime choices. The
-  final result is always six case-insensitively unique phrases. A valid AI result
-  is blended with the same maximum of two relevant favorites before it is saved
-  or returned, leaving at least four other choices.
+  final result is always six case-insensitively unique phrases.
 - Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
-- Without AI, `source` is `history` when spoken history is available, otherwise
-  `default` (including a favorite-personalized default). `artifact_version` is
+- `source` is `ai` when a generic AI phrase made the six, otherwise `history`
+  when spoken history is available, otherwise `default` (including favorites and
+  word-bank choices). `artifact_version` is
   always null for now.
-- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent`, the patient's explicit `favorite_items`, and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output is personalized as above and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Prediction response shapes are unchanged, and `recent` is still never stored. Other patients' favorites and raw conversation context are never included.
+- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the provider gets only `activity` and the time bucket as JSON data, never spoken history, `recent`, favorites, profile facts, transcripts or IDs, and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Its generic phrases fill slots after the patient's favorites and history, which are applied on the device. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Prediction response shapes are unchanged, and `recent` is still never stored or sent anywhere.
 - `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
 - `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 

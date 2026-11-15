@@ -12,10 +12,20 @@ from jsonschema import Draft202012Validator, FormatChecker
 from aac.history import time_bucket
 from aac.models import CommunicationEvent, PredictionRecord, Profile
 from aac.openapi import SCHEMAS
-from aac.predictions import DEFAULT_PHRASES, predict_phrases, weight
+from aac.predictions import DEFAULT_PHRASES, activity_phrases, predict_phrases, weight
 
 PREFERENCES = {'scan_interval_ms': 1500, 'input_modes': ['button', 'keyboard'], 'default_activity': 'play'}
 NOW = datetime(2026, 11, 14, 17, 0, tzinfo=timezone.utc)  # 12:00 in New York: midday
+
+
+def fallback(activity):
+    """What a patient without usable history sees: word-bank phrases for the activity, then defaults."""
+    phrases, seen = [], set()
+    for phrase in [*activity_phrases(activity), *DEFAULT_PHRASES]:
+        if phrase.casefold() not in seen and len(phrases) < 6:
+            seen.add(phrase.casefold())
+            phrases.append(phrase)
+    return phrases
 
 
 def make_patient(name='Demo patient', **extra):
@@ -60,9 +70,9 @@ class PredictionTests(TestCase):
         ).validate(response.json())
         return response.json()
 
-    def test_empty_history_returns_saved_defaults(self):
+    def test_empty_history_returns_saved_word_bank_choices(self):
         result = self.ok(self.predict())
-        self.assertEqual(result['phrases'], list(DEFAULT_PHRASES[:6]))
+        self.assertEqual(result['phrases'], fallback('lunch'))
         self.assertEqual((result['source'], result['artifact_version']), ('default', None))
         record = PredictionRecord.objects.get(pk=result['prediction_id'])
         self.assertEqual((record.patient, record.phrases, record.activity, record.time_bucket),
@@ -107,7 +117,7 @@ class PredictionTests(TestCase):
         speak(self.patient, 'Only feedback', kind='feedback')
         result = self.ok(self.predict())
         self.assertEqual(result['source'], 'default')
-        self.assertEqual(result['phrases'], list(DEFAULT_PHRASES[:6]))
+        self.assertEqual(result['phrases'], fallback('lunch'))
 
     def test_repeated_requests_are_deterministic_with_stable_ties(self):
         for text in ('Banana', 'apple', 'Cherry'):
@@ -157,7 +167,7 @@ class PredictionTests(TestCase):
     def test_unreadable_history_falls_back_but_unsaved_record_is_503(self):
         speak(self.patient, 'Hidden by failure')
         with patch('aac.views.recent_spoken', side_effect=DatabaseError('private')):
-            self.assertEqual(self.ok(self.predict())['phrases'], list(DEFAULT_PHRASES[:6]))
+            self.assertEqual(self.ok(self.predict())['phrases'], fallback('lunch'))
         with patch('aac.views.PredictionRecord.objects.create', side_effect=DatabaseError('private')):
             response = self.predict()
         self.assertEqual(response.status_code, 503)
@@ -183,11 +193,11 @@ class LegacyPredictTests(TestCase):
         self.assertEqual(PredictionRecord.objects.count(), 0)
 
     def test_missing_patient_or_storage_returns_defaults(self):
-        self.assertEqual(self.predict().json(), {'phrases': list(DEFAULT_PHRASES[:6])})
+        self.assertEqual(self.predict().json(), {'phrases': fallback('lunch')})
         make_patient(pk=settings.LEGACY_DEMO_PATIENT_ID)
         with patch('aac.views.recent_spoken', side_effect=DatabaseError('private')):
             response = self.predict()
-        self.assertEqual(response.json(), {'phrases': list(DEFAULT_PHRASES[:6])})
+        self.assertEqual(response.json(), {'phrases': fallback('lunch')})
 
     def test_legacy_validation(self):
         for changes in ({'recent': None}, {'activity': ''}, {'time': 'noon'}, {'patient_id': str(uuid4())}):
