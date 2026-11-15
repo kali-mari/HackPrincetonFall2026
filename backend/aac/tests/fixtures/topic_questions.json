@@ -1,0 +1,217 @@
+{
+ "description": "Synthetic caregiver questions (none copied from wordbank.json examples) with the expected word-bank topic; null means no topic should match.",
+ "questions": [
+  {
+   "question": "Which math sign do you like the most?",
+   "topic": "math"
+  },
+  {
+   "question": "do you like the plus sign or the minus sign",
+   "topic": "math"
+  },
+  {
+   "question": "what is your favourite maths symbol",
+   "topic": "math"
+  },
+  {
+   "question": "Is adding or taking away more fun?",
+   "topic": "math"
+  },
+  {
+   "question": "Which number is the best one?",
+   "topic": "math"
+  },
+  {
+   "question": "whats ur favorite math symbol",
+   "topic": "math"
+  },
+  {
+   "question": "What subjects do you have this year?",
+   "topic": "classes"
+  },
+  {
+   "question": "what classes are you takin",
+   "topic": "classes"
+  },
+  {
+   "question": "Which lessons are you in this semester?",
+   "topic": "classes"
+  },
+  {
+   "question": "Do you have science or art this term?",
+   "topic": "classes"
+  },
+  {
+   "question": "what courses do you have",
+   "topic": "classes"
+  },
+  {
+   "question": "Tell me about the classes on your schedule.",
+   "topic": "classes"
+  },
+  {
+   "question": "What do you want to do when school is over?",
+   "topic": "after_school"
+  },
+  {
+   "question": "what should we do after school today",
+   "topic": "after_school"
+  },
+  {
+   "question": "Once you get home, what do you want to do?",
+   "topic": "after_school"
+  },
+  {
+   "question": "Any plans for this afternoon?",
+   "topic": "after_school"
+  },
+  {
+   "question": "After class, do you want to go to the park?",
+   "topic": "after_school"
+  },
+  {
+   "question": "Would you like a cup of milk?",
+   "topic": "drink"
+  },
+  {
+   "question": "you need some water",
+   "topic": "drink"
+  },
+  {
+   "question": "Want a sip?",
+   "topic": "drink"
+  },
+  {
+   "question": "What should we have for lunch?",
+   "topic": "food"
+  },
+  {
+   "question": "Is your tummy rumbling?",
+   "topic": "food"
+  },
+  {
+   "question": "do you want pizza or a sandwich",
+   "topic": "food"
+  },
+  {
+   "question": "Shall we play a game together?",
+   "topic": "play"
+  },
+  {
+   "question": "Which toy should we get out?",
+   "topic": "play"
+  },
+  {
+   "question": "Want to throw the ball?",
+   "topic": "play"
+  },
+  {
+   "question": "Are you okay?",
+   "topic": "feelings"
+  },
+  {
+   "question": "Are you feeling upset?",
+   "topic": "feelings"
+  },
+  {
+   "question": "Where does it hurt?",
+   "topic": "feelings"
+  },
+  {
+   "question": "Do you have to go potty?",
+   "topic": "hygiene"
+  },
+  {
+   "question": "Need to use the restroom?",
+   "topic": "hygiene"
+  },
+  {
+   "question": "lets wash our hands",
+   "topic": "hygiene"
+  },
+  {
+   "question": "What happened at school?",
+   "topic": "school"
+  },
+  {
+   "question": "Did you like your teacher today?",
+   "topic": "school"
+  },
+  {
+   "question": "What did you learn today?",
+   "topic": "school"
+  },
+  {
+   "question": "Are you sleepy?",
+   "topic": "bedtime"
+  },
+  {
+   "question": "Ready for bed?",
+   "topic": "bedtime"
+  },
+  {
+   "question": "Do you want a nap?",
+   "topic": "bedtime"
+  },
+  {
+   "question": "Who did you play with at recess?",
+   "topic": "people"
+  },
+  {
+   "question": "Do you want to call grandma?",
+   "topic": "people"
+  },
+  {
+   "question": "Who is your favorite person?",
+   "topic": "people"
+  },
+  {
+   "question": "What is the weather like outside?",
+   "topic": null
+  },
+  {
+   "question": "Did you watch the movie last night?",
+   "topic": null
+  },
+  {
+   "question": "What color is your shirt?",
+   "topic": "colors"
+  },
+  {
+   "question": "Do you know what day it is?",
+   "topic": null
+  },
+  {
+   "question": "Where did I put my keys?",
+   "topic": null
+  },
+  {
+   "question": "Can you hear the music?",
+   "topic": null
+  },
+  {
+   "question": "Which animal do you like most?",
+   "topic": "animals"
+  },
+  {
+   "question": "Do you like the rain?",
+   "topic": null
+  },
+  {
+   "question": "What did the doctor say?",
+   "topic": null
+  },
+  {
+   "question": "Is the car ready?",
+   "topic": null
+  },
+  {
+   "question": "What color do you like best?",
+   "topic": "colors"
+  },
+  {
+   "question": "How old are you?",
+   "topic": null
+  }
+ ]
+}

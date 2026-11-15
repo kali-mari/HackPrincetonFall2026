@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { events, patientPreferences, predict, saveFavorites, type CaregiverProfile, type FavoriteItems, type LogEvent, type PatientProfile } from './api'
+import { events, patientPreferences, predict, saveProfileDetails, type CaregiverProfile, type LogEvent, type PatientPreferences, type PatientProfile, type ProfileDetails } from './api'
 import styles from './Caregiver.module.css'
 
 type Prediction = { label: string; activity: string; phrases: string[] }
@@ -8,8 +8,28 @@ const timeFormat = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute:
 const dayFormat = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 const RECENT_DAYS = 7
 const DAY_MS = 24 * 60 * 60 * 1000
-const FAVORITE_FIELDS = [{ key: 'foods', label: 'Favorite foods' }, { key: 'drinks', label: 'Favorite drinks' },
-  { key: 'activities', label: 'Favorite activities or toys' }] as const
+// One textarea per list; group says where it is stored in preferences (vocabulary is a plain list).
+const DETAIL_FIELDS = [
+  { key: 'foods', group: 'favorites', label: 'Favorite foods', max: 10 },
+  { key: 'drinks', group: 'favorites', label: 'Favorite drinks', max: 10 },
+  { key: 'activities', group: 'favorites', label: 'Favorite activities or toys', max: 10 },
+  { key: 'classes', group: 'about', label: 'Classes', max: 10 },
+  { key: 'interests', group: 'about', label: 'Interests and after-school activities', max: 10 },
+  { key: 'people', group: 'about', label: 'Important people', max: 10 },
+  { key: 'vocabulary', group: null, label: 'Custom words or phrases', max: 50 },
+] as const
+type DetailKey = (typeof DETAIL_FIELDS)[number]['key']
+const EMPTY_DRAFT = Object.fromEntries(DETAIL_FIELDS.map(({ key }) => [key, ''])) as Record<DetailKey, string>
+
+function draftFrom(preferences: PatientPreferences): Record<DetailKey, string> {
+  const draft = { ...EMPTY_DRAFT }
+  for (const { key, group } of DETAIL_FIELDS) {
+    const items = group === null ? preferences.vocabulary
+      : (preferences[group] as Record<string, string[] | undefined> | undefined)?.[key]
+    draft[key] = (items ?? []).join('\n')
+  }
+  return draft
+}
 
 function at1215() {
   const time = new Date()
@@ -26,46 +46,45 @@ export default function Caregiver({ patient, caregiver, patients, onSelectPatien
   const [error, setError] = useState('')
   const [predictionError, setPredictionError] = useState('')
   const [today] = useState(() => new Date())
-  const [favoriteDraft, setFavoriteDraft] = useState({ foods: '', drinks: '', activities: '' })
-  const [favoritesReady, setFavoritesReady] = useState(false)
-  const [favoriteError, setFavoriteError] = useState('')
-  const [favoriteStatus, setFavoriteStatus] = useState('')
-  const [savingFavorites, setSavingFavorites] = useState(false)
+  const [detailDraft, setDetailDraft] = useState(EMPTY_DRAFT)
+  const [detailsReady, setDetailsReady] = useState(false)
+  const [detailError, setDetailError] = useState('')
+  const [detailStatus, setDetailStatus] = useState('')
+  const [savingDetails, setSavingDetails] = useState(false)
   const [savedVersion, setSavedVersion] = useState(0)
 
-  async function updateFavorites() {
-    setFavoriteError('')
-    setFavoriteStatus('')
-    const favorites: FavoriteItems = {}
-    for (const { key } of FAVORITE_FIELDS) {
-      const items = favoriteDraft[key].split('\n').map((item) => item.trim()).filter(Boolean)
-      if (items.length > 10 || items.some((item) => item.length > 60)
+  async function updateDetails() {
+    setDetailError('')
+    setDetailStatus('')
+    const details: Required<ProfileDetails> = { favorites: {}, about: {}, vocabulary: [] }
+    for (const { key, group, label, max } of DETAIL_FIELDS) {
+      const items = detailDraft[key].split('\n').map((item) => item.trim()).filter(Boolean)
+      if (items.length > max || items.some((item) => item.length > 60)
         || new Set(items.map((item) => item.toLowerCase())).size !== items.length) {
-        setFavoriteError('Use up to 10 different items per group, at most 60 characters each.')
+        setDetailError(`${label}: use up to ${max} different items, at most 60 characters each.`)
         return
       }
-      favorites[key] = items
+      if (group === null) details.vocabulary = items
+      else (details[group] as Record<string, string[]>)[key] = items
     }
-    setSavingFavorites(true)
+    setSavingDetails(true)
     try {
-      await saveFavorites(patient.id, favorites)
-      setFavoriteStatus('Favorites saved.')
+      await saveProfileDetails(patient.id, details)
+      setDetailStatus('Saved.')
       setSavedVersion((value) => value + 1)
     } catch {
-      setFavoriteError('Favorites could not be saved. Check the connection and try again.')
+      setDetailError('These details could not be saved. Check the connection and try again.')
     } finally {
-      setSavingFavorites(false)
+      setSavingDetails(false)
     }
   }
 
   useEffect(() => {
     if (savedVersion === 0) {
       patientPreferences(patient.id).then((preferences) => {
-        const favorites = preferences.favorites ?? {}
-        setFavoriteDraft({ foods: (favorites.foods ?? []).join('\n'), drinks: (favorites.drinks ?? []).join('\n'),
-          activities: (favorites.activities ?? []).join('\n') })
-        setFavoritesReady(true)
-      }).catch(() => setFavoriteError('Favorite items could not be loaded. Check the connection and reload.'))
+        setDetailDraft(draftFrom(preferences))
+        setDetailsReady(true)
+      }).catch(() => setDetailError('These details could not be loaded. Check the connection and reload.'))
     }
     const since = Date.now() - RECENT_DAYS * DAY_MS
     events(patient.id)
@@ -151,25 +170,25 @@ export default function Caregiver({ patient, caregiver, patients, onSelectPatien
         </section>
 
         <div className={styles.side}>
-          <section className={styles.card} aria-labelledby="favorites-title">
-            <h2 id="favorites-title">Favorite items</h2>
-            <p className={styles.muted}>Choose the child's favorites. Put one item on each line, up to 10 per group.
-              These are saved with the local profile and used to personalize AI suggestions.</p>
-            <form className={styles.favorites} onSubmit={(event) => { event.preventDefault(); void updateFavorites() }}>
-              {FAVORITE_FIELDS.map(({ key, label }) => (
+          <section className={styles.card} aria-labelledby="details-title">
+            <h2 id="details-title">About the child</h2>
+            <p className={styles.muted}>Put one item on each line. These are saved with the local profile and
+              treated as known facts when suggesting answers. Suggestions and the child's choices never change them.</p>
+            <form className={styles.favorites} onSubmit={(event) => { event.preventDefault(); void updateDetails() }}>
+              {DETAIL_FIELDS.map(({ key, label }) => (
                 <label key={key}>
                   <span>{label}</span>
-                  <textarea rows={3} value={favoriteDraft[key]} disabled={!favoritesReady || savingFavorites}
+                  <textarea rows={3} value={detailDraft[key]} disabled={!detailsReady || savingDetails}
                     onChange={(event) => {
-                      setFavoriteDraft((value) => ({ ...value, [key]: event.target.value }))
-                      setFavoriteStatus('')
+                      setDetailDraft((value) => ({ ...value, [key]: event.target.value }))
+                      setDetailStatus('')
                     }} />
                 </label>
               ))}
-              {favoriteError && <p className={styles.problem} role="alert">{favoriteError}</p>}
-              {favoriteStatus && <p role="status">{favoriteStatus}</p>}
-              <button type="submit" disabled={!favoritesReady || savingFavorites}>
-                {savingFavorites ? 'Saving…' : 'Save favorites'}
+              {detailError && <p className={styles.problem} role="alert">{detailError}</p>}
+              {detailStatus && <p role="status">{detailStatus}</p>}
+              <button type="submit" disabled={!detailsReady || savingDetails}>
+                {savingDetails ? 'Saving…' : 'Save details'}
               </button>
             </form>
           </section>

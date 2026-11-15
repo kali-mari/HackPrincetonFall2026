@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { activityAt, logSentence, patientPreferences, predict, speak, type FavoriteItems, type PatientProfile } from './api'
+import { activityAt, logSentence, predict, speak, type PatientProfile } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
@@ -7,7 +7,6 @@ import { EMPTY_STRIP, addWords, clearStrip, deleteLast as deleteFromStrip } from
 import { useSwitchInput, type Action, type Source, type SourceSettings } from './useSwitchInput'
 import { useVoiceSwitch } from './useVoiceSwitch'
 import { useConversation } from './useConversation'
-import { conversationSuggestions } from './conversationSuggestions'
 import styles from './App.module.css'
 import tileStyles from './components/Tile.module.css'
 
@@ -15,6 +14,8 @@ const SETTINGS_KEY = 'aac-input-sources'
 const HOME_KEY = 'aac-play-on-home'
 const SENSITIVITY_KEY = 'aac-voice-sensitivity'
 const DEFAULT_SENSITIVITY = 0.7
+const TOPIC_THRESHOLD_KEY = 'aac-topic-threshold'
+const DEFAULT_TOPIC_THRESHOLD = 0.45 // matches the backend's default
 const SOURCES: { id: Source; label: string; hint: string }[] = [
   { id: 'button', label: 'Buttons', hint: 'The PREV, NEXT, WORD, DEL and SAY switches' },
   { id: 'voice', label: 'Voice switch', hint: 'The laptop microphone hears a sound held for about half a second' },
@@ -33,6 +34,15 @@ function loadSensitivity(): number {
     return Number(localStorage.getItem(SENSITIVITY_KEY)) || DEFAULT_SENSITIVITY
   } catch {
     return DEFAULT_SENSITIVITY
+  }
+}
+
+function loadTopicThreshold(): number {
+  try {
+    const value = Number(localStorage.getItem(TOPIC_THRESHOLD_KEY))
+    return value >= 0.25 && value <= 0.75 ? value : DEFAULT_TOPIC_THRESHOLD
+  } catch {
+    return DEFAULT_TOPIC_THRESHOLD
   }
 }
 
@@ -124,7 +134,8 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
   const [sources, setSources] = useState(loadSettings)
   const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
   const [sensitivity, setSensitivity] = useState(loadSensitivity)
-  const conversation = useConversation(() => setScan((value) => value?.group === 1 ? null : value))
+  const [topicThreshold, setTopicThreshold] = useState(loadTopicThreshold)
+  const conversation = useConversation(patient.id, topicThreshold, () => setScan((value) => value?.group === 1 ? null : value))
   const listening = conversation.phase === 'listening'
   const showConversation = conversation.active || Boolean(conversation.error)
   const [started, setStarted] = useState(false) // Chrome plays no sound until someone taps the page once
@@ -133,8 +144,8 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
   const clockInput = useRef<HTMLInputElement>(null)
   // Blank until the first reply, so a dead backend never hides behind made-up phrases.
   const [regularPredictions, setRegularPredictions] = useState(BLANK_PREDICTIONS)
-  const [favorites, setFavorites] = useState<FavoriteItems>({})
-  const localSuggestions = listening ? conversationSuggestions(conversation.segments, favorites) : null
+  // While listening, the UNO Q's six answer choices for the newest phrase replace the regular row.
+  const localSuggestions = listening ? conversation.suggestions : null
   const predictions = localSuggestions?.phrases ?? regularPredictions
   const [activity, setActivity] = useState('')
   const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
@@ -162,6 +173,15 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
     setSensitivity(value)
     try {
       localStorage.setItem(SENSITIVITY_KEY, String(value))
+    } catch {
+      // Same as toggleSource: applies for this session only.
+    }
+  }
+
+  function changeTopicThreshold(value: number) {
+    setTopicThreshold(value)
+    try {
+      localStorage.setItem(TOPIC_THRESHOLD_KEY, String(value))
     } catch {
       // Same as toggleSource: applies for this session only.
     }
@@ -196,9 +216,8 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
         time.setHours(hours, minutes, 0, 0)
       }
       setActivity(activityAt(time))
-      const [prediction, profile] = await Promise.allSettled([predict(patient.id, time, recent), patientPreferences(patient.id)])
+      const [prediction] = await Promise.allSettled([predict(patient.id, time, recent)])
       if (stale) return
-      if (profile.status === 'fulfilled') setFavorites(profile.value.favorites ?? {})
       if (prediction.status === 'fulfilled') {
         setRegularPredictions(prediction.value.phrases)
         setScan((value) => value?.group === 1 ? null : value)
@@ -526,7 +545,7 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
       {showConversation && (
         <aside className={styles.conversation} aria-label="Caregiver listen mode">
           <div role="status" aria-live="polite">
-            <strong>{conversation.error ? 'Listening unavailable' : conversation.phase === 'paused' ? 'Listening paused while speaking' : listening ? `Listening${localSuggestions ? ` · ${localSuggestions.topic} suggestions` : ''}` : 'Starting listening…'}</strong>
+            <strong>{conversation.error ? 'Listening unavailable' : conversation.phase === 'paused' ? 'Listening paused while speaking' : listening ? `Listening${localSuggestions ? ` · ${localSuggestions.topic ?? 'Answer'} choices` : ''}` : 'Starting listening…'}</strong>
             <p>{conversation.error || conversation.transcript || 'Speak a short phrase, then pause. Text stays here only while listening.'}</p>
           </div>
           <button onClick={() => void conversation.stop()}>{conversation.error ? 'Dismiss' : 'Stop listening'}</button>
@@ -567,6 +586,21 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
         }}>
           {conversation.active ? 'Stop caregiver listening' : 'Start caregiver listening'}
         </button>
+        <div className={styles.voice}>
+          <label>
+            Topic match: {topicThreshold.toFixed(2)}
+            <input
+              type="range"
+              min={0.25}
+              max={0.75}
+              step={0.05}
+              value={topicThreshold}
+              onChange={(e) => changeTopicThreshold(Number(e.target.value))}
+            />
+          </label>
+          <p>How sure listening must be about a question's topic before showing topic choices.
+            Higher shows general choices more often. Default {DEFAULT_TOPIC_THRESHOLD.toFixed(2)}.</p>
+        </div>
         {SOURCES.map((s) => (
           <label key={s.id} className={styles.source}>
             <input type="checkbox" checked={sources[s.id]} onChange={() => toggleSource(s.id)} />

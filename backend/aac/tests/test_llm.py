@@ -12,7 +12,6 @@ from jsonschema import Draft202012Validator, FormatChecker
 from aac import llm
 from aac.models import PredictionRecord
 from aac.openapi import SCHEMAS
-from aac.predictions import DEFAULT_PHRASES
 from aac.tests.test_predictions import NOW, make_patient, speak
 
 AI_PHRASES = ['I want pizza', 'More juice', 'Can I play?', 'All done', 'Help me', 'I love this']
@@ -45,7 +44,7 @@ class ParsePhrasesTests(SimpleTestCase):
 @override_settings(PREDICT_PROVIDER='openai', PREDICT_MODEL='test-model', PREDICT_TIMEOUT_SECONDS=0.3)
 class SuggestPhrasesTests(SimpleTestCase):
     def suggest(self):
-        return llm.suggest_phrases('lunch', 'midday', ['I want'], list(DEFAULT_PHRASES[:6]))
+        return llm.suggest_phrases('lunch', 'midday')
 
     def test_disabled_without_provider_or_model(self):
         provider = Mock(return_value=reply())
@@ -70,11 +69,7 @@ class SuggestPhrasesTests(SimpleTestCase):
         system, prompt, model = provider.call_args.args
         self.assertEqual(system, llm.SYSTEM)
         self.assertEqual(model, 'test-model')
-        self.assertEqual(json.loads(prompt), {
-            'activity': 'lunch', 'time_of_day': 'midday', 'recent_spoken_phrases': ['I want'],
-            'frequent_phrases': list(DEFAULT_PHRASES[:6]),
-            'favorite_items': {},
-        })
+        self.assertEqual(json.loads(prompt), {'activity': 'lunch', 'time_of_day': 'midday'})  # nothing about the patient
 
     def test_failures_return_none_without_logging_content(self):
         for provider in (Mock(side_effect=RuntimeError('secret-key-in-message')),
@@ -125,34 +120,36 @@ class PredictRouteAITests(TestCase):
         with patch.dict(llm.PROVIDERS, {'openai': provider}), patch.object(llm.log, 'warning'):
             return self.client.post(path, body, content_type='application/json')
 
-    def test_ai_phrases_are_returned_and_saved_as_ai(self):
+    def test_generic_ai_phrases_follow_the_patients_own_history(self):
         provider = Mock(return_value=reply())
         response = self.predict(provider)
         data = response.json()
         Draft202012Validator(SCHEMAS['PredictResponse'], format_checker=FormatChecker()).validate(data)
-        self.assertEqual((data['phrases'], data['source']), (AI_PHRASES, 'ai'))
+        expected = ['Pizza please', *AI_PHRASES[:5]]
+        self.assertEqual((data['phrases'], data['source']), (expected, 'ai'))
         record = PredictionRecord.objects.get(pk=data['prediction_id'])
-        self.assertEqual((record.phrases, record.source), (AI_PHRASES, 'ai'))
-        # The model saw this patient's history-ranked phrases as context
-        self.assertEqual(json.loads(provider.call_args.args[1])['frequent_phrases'][0], 'Pizza please')
+        self.assertEqual((record.phrases, record.source), (expected, 'ai'))
+        # The model saw only the activity and time of day, never this patient's history
+        self.assertEqual(json.loads(provider.call_args.args[1]), {'activity': 'lunch', 'time_of_day': 'midday'})
 
     def test_failure_falls_back_to_history(self):
         data = self.predict(Mock(side_effect=TimeoutError)).json()
         self.assertEqual((data['phrases'][0], data['source']), ('Pizza please', 'history'))
 
-    def test_favorites_enter_ai_context_and_keep_six_varied_choices(self):
-        favorites = {'foods': ['pears'], 'drinks': ['mango juice']}
-        self.patient.preferences = {**self.patient.preferences, 'favorites': favorites}
+    def test_patient_data_never_reaches_the_hosted_model(self):
+        self.patient.preferences = {**self.patient.preferences, 'favorites': {'foods': ['pears'], 'drinks': ['mango juice']},
+                                    'about': {'classes': ['Chemistry']}, 'vocabulary': ['dinosaur books']}
         self.patient.save()
         provider = Mock(return_value=reply())
         data = self.predict(provider).json()
-        self.assertEqual(json.loads(provider.call_args.args[1])['favorite_items'], favorites)
-        self.assertEqual(data['phrases'][:2], ['I want pears', 'I want mango juice'])
+        prompt = provider.call_args.args[1]
+        for private in ('pears', 'mango', 'Chemistry', 'dinosaur', 'Pizza please', 'I want', str(self.patient.pk),
+                        self.patient.display_name):
+            self.assertNotIn(private, prompt)
+        # Favorites and history are applied here instead, ahead of the generic phrases
+        self.assertEqual(data['phrases'][:3], ['I want pears', 'I want mango juice', 'Pizza please'])
         self.assertEqual(len(set(data['phrases'])), 6)
         self.assertEqual(data['source'], 'ai')
-        self.patient = make_patient(name='Another patient')
-        self.predict(provider)
-        self.assertEqual(json.loads(provider.call_args.args[1])['favorite_items'], {})
 
     def test_provider_failure_retains_contextual_favorites_without_inventing_events(self):
         self.patient.preferences = {**self.patient.preferences, 'favorites': {'foods': ['pears']}}
@@ -165,7 +162,7 @@ class PredictRouteAITests(TestCase):
     def test_legacy_route_keeps_its_shape(self):
         with override_settings(LEGACY_DEMO_PATIENT_ID=self.patient.pk):
             self.assertEqual(self.predict(Mock(return_value=reply()), '/api/predict').json(),
-                             {'phrases': AI_PHRASES})
+                             {'phrases': ['Pizza please', *AI_PHRASES[:5]]})
             data = self.predict(Mock(return_value='bad'), '/api/predict').json()
         self.assertEqual(set(data), {'phrases'})
         self.assertEqual(data['phrases'][0], 'Pizza please')

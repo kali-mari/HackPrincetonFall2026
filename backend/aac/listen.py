@@ -58,7 +58,8 @@ def load_vad():
         raise TranscriptionUnavailable('Transcription runtime is not installed.') from None
     config = sherpa_onnx.VadModelConfig()
     config.silero_vad.model = str(path)
-    config.silero_vad.min_silence_duration = 0.5  # pause that ends a phrase
+    # Pause that ends a phrase: shorter answers sooner but may split a sentence where the speaker pauses.
+    config.silero_vad.min_silence_duration = settings.LISTEN_SILENCE_SECONDS
     config.silero_vad.min_speech_duration = 0.25  # shorter sounds are ignored
     config.silero_vad.max_speech_duration = 10  # long speech is cut into 10 s pieces
     config.sample_rate = SAMPLE_RATE

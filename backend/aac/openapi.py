@@ -123,6 +123,11 @@ SCHEMAS = {
          for group in ("foods", "drinks", "activities")},
         description="Explicit favorite items, stored locally with patient preferences. Items are trimmed, printable, and case-insensitively unique per group. Empty groups clear favorites; spoken frequency does not automatically create favorites.",
     ),
+    "AboutItems": obj(
+        {group: array(text(60), maxItems=10, uniqueItems=True)
+         for group in ("classes", "interests", "people")},
+        description="Caregiver-confirmed facts about the patient, stored locally with patient preferences and used to answer matching conversation topics. Same item rules as favorites. Suggestions and selections never add to them.",
+    ),
     "Error": obj(
         {"error": obj({"code": text(80), "message": text(300)}, ("code", "message"))},
         ("error",),
@@ -141,6 +146,11 @@ SCHEMAS = {
             "default_activity": text(100),
             "voice_id": text(100),
             "favorites": ref("FavoriteItems"),
+            "about": ref("AboutItems"),
+            "vocabulary": array(
+                text(60), maxItems=50, uniqueItems=True,
+                description="Caregiver-added words or phrases this patient uses, stored locally. Same item rules as favorites; never filled in automatically.",
+            ),
         },
         ("scan_interval_ms", "input_modes", "default_activity"),
     ),
@@ -443,11 +453,16 @@ SCHEMAS = {
         },
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
-    "ConversationClientMessage": obj(
-        {"type": enum("start", "stop")},
-        ("type",),
-        description="WS /ws/conversation/ client message: start or stop caregiver listen mode.",
-    ),
+    "ConversationClientMessage": {
+        "oneOf": [
+            obj({"type": enum("start"), "patient_id": UUID,
+                 "topic_threshold": {"type": "number", "minimum": 0.25, "maximum": 0.75, "default": 0.45,
+                                     "description": "Topic-match cutoff for the on-device model, from the board's input settings. Higher gives fewer, surer topic cards and more general choices. Ignored when the model is off."}},
+                ("type",)),
+            obj({"type": enum("stop")}, ("type",)),
+        ],
+        "description": "WS /ws/conversation/ client message: start or stop caregiver listen mode. start may name the patient whose confirmed facts, vocabulary and recent speech personalize suggestions (unknown patient: error); without it suggestions are generic.",
+    },
     "ConversationServerMessage": {
         "oneOf": [
             obj({"type": enum("state"), "listening": {"type": "boolean"}}, ("type", "listening")),
@@ -456,8 +471,20 @@ SCHEMAS = {
                 ("type", "seq", "text"),
             ),
             obj({"type": enum("error"), "message": {"type": "string", "minLength": 1}}, ("type", "message")),
+            obj(
+                {
+                    "type": enum("suggestions"),
+                    "seq": {"type": "integer", "minimum": 1},
+                    "topic": {"type": ["string", "null"], "minLength": 1, "maxLength": 60},
+                    "phrases": {
+                        "type": "array", "items": text(100), "uniqueItems": True,
+                        "anyOf": [{"maxItems": 0}, {"minItems": 6, "maxItems": 6}],
+                    },
+                },
+                ("type", "seq", "topic", "phrases"),
+            ),
         ],
-        "description": "WS /ws/conversation/ server message: listening state, one finished phrase (seq counts from 1 per connection), or a safe error message.",
+        "description": "WS /ws/conversation/ server message: listening state, one finished phrase (seq counts from 1 per connection), the six local answer choices for that phrase and the ones before it (suggestions with the same seq; no phrases means keep regular predictions; ignore one older than the newest shown), or a safe error message. Suggestions are computed on the device, never stored, and never selected or spoken automatically.",
     },
     "InputMessage": obj(
         {
@@ -728,7 +755,7 @@ def build_openapi():
 
     predict_request = {"time": NOW, "activity": "lunch", "recent": ["I want"]}
     speech_description = "Text-to-speech, not microphone input. Generate MP3 audio with the configured provider (SPEECH_PROVIDER, currently ElevenLabs) and return an absolute playable URL under /media/audio/. Identical provider/model/voice/text may reuse cached audio. When GOOGLE_HOME_HOST is configured, also casts in the background; casting failure never changes the response. While the clip plays, listen mode (WS /ws/conversation/) hears silence: the microphone is blanked for the clip's length plus 1.5 s (4 s when casting). With prefetch true, the clip is only made or reused: no cast and no listen pause, same response shape. Does not record playback. Client records spoken only on completion; cancellation/failure creates no spoken event. 503 when the provider is unconfigured or fails, or audio cannot be stored; never a fake URL."
-    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. Optional AI (PREDICT_PROVIDER: openai, anthropic, gemini or bedrock) receives activity, time bucket, recent and the history-ranked phrases as data. AI wait over two seconds (PREDICT_TIMEOUT_SECONDS), failure or invalid output uses history/default fallback (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
+    prediction_description = "Return six nonempty phrases, unique after trim/case-fold. No automatic selection/speech. Order: up to two relevant favorites, the patient's spoken history, optional generic AI phrases, word-bank phrases for the activity (backend/aac/wordbank.json), then defaults. Optional AI (PREDICT_PROVIDER: openai, anthropic, gemini or bedrock) receives only the activity and time bucket: never history, recent, favorites, profile facts or transcripts. AI wait over two seconds (PREDICT_TIMEOUT_SECONDS), failure or invalid output simply leaves those slots to the word bank and defaults (200). Rank confirmed spoken history with weight 0.5 ** (age_days / 7); clamp negative age to zero. Count each utterance once; selections, suggestions and passive conversation topics are not positive evidence. Match activity/time bucket first, then fill with broader history/defaults. No prediction expiry during the hackathon."
     add(
         "/api/speak",
         "post",
@@ -1138,9 +1165,11 @@ def build_openapi():
                 "client_message": ref("ConversationClientMessage"),
                 "server_message": ref("ConversationServerMessage"),
                 "example": [
-                    {"type": "start"},
+                    {"type": "start", "patient_id": "22222222-2222-4222-8222-222222222222"},
                     {"type": "state", "listening": True},
                     {"type": "transcript", "seq": 1, "text": "Do you want juice?"},
+                    {"type": "suggestions", "seq": 1, "topic": "Drinks",
+                     "phrases": ["Yes", "No", "Juice please", "Water please", "I am thirsty", "Something else"]},
                     {"type": "stop"},
                     {"type": "state", "listening": False},
                 ],

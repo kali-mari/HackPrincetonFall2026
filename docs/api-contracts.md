@@ -15,7 +15,7 @@
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | `WS /ws/conversation/` | Implemented: caregiver listen mode. On-device mic capture, voice detection and transcription; numbered phrases to the one connection that started it (`aac/listen.py`, `aac/consumers.py`) |
-| Conversation Mode topic timeline and suggestions | Six local browser suggestions implemented from the rolling transcript; saved timeline remains stretch design, with no contract |
+| Conversation Mode topic timeline and suggestions | Six on-device suggestions per phrase over `WS /ws/conversation/` (`aac/conversation.py`, word bank, optional MiniLM); saved timeline remains stretch design, with no contract |
 
 The **contract/documentation layer, HTTP route scaffolds, profile operations, event history, deterministic/AI predictions and speech** are implemented. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
@@ -29,6 +29,12 @@ The **contract/documentation layer, HTTP route scaffolds, profile operations, ev
   Unknown groups, nulls, wrong types, and duplicate/oversized items return 400
   without changing the profile. Empty groups or `{}` clear favorites. This uses
   the existing SQLite profile JSON column and needs no migration or new route.
+- **Optional profile facts and vocabulary:** `preferences.about` accepts
+  `classes`, `interests`, and `people` with the same item rules as favorites.
+  `preferences.vocabulary` is a list of up to 50 caregiver-added words or
+  phrases with the same item rules. Only caregivers write these; suggestions
+  and the patient's selections never add to them. Conversation topics in
+  `backend/aac/wordbank.json` read them through each topic's `profile_key`.
 - A caregiver ID used as a patient ID (or the reverse) is 404, like an unknown ID.
 - Patient lists use ascending UUID order with a signed opaque cursor bound to the caregiver; a tampered, repeated or other-caregiver cursor is 400. The last page returns `next_cursor: null` (no empty terminal page).
 - **Additive 503:** all six profile operations may return `503 { "error": { "code": "unavailable", "message": "Profile storage is unavailable." } }` when SQLite is unavailable (for example, an unmigrated or unwritable database). Writes roll back; database details are never included.
@@ -50,18 +56,17 @@ Ranking lives in `backend/aac/predictions.py` and needs no network access.
 
 - Evidence is the patient's confirmed `spoken` events only (latest 1,000); selections, feedback, displayed suggestions and `recent` are not evidence. Other patients' history is never used.
 - Each event adds `0.5 ** (max(0, age_days) / 7)` to its phrase, with age measured from the request `time`. Phrases merge after trim/case-fold; the newest spelling is shown.
-- Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
+- Tiers fill the six slots in order: same activity and time bucket, same activity, same time bucket, all history, then optional generic AI phrases, then word-bank phrases for the activity (`backend/aac/wordbank.json`: meals use food and drink, play uses play, bedtime uses bedtime; other activity names match topic keywords), then curated defaults (`I want water`, `More please`, `I am hungry`, `All done`, `Help me`, `Thank you`, then `Yes`, `No`, `I need a break`, `Bathroom please`). Activity matching ignores case and surrounding spaces.
 - Up to two context-relevant explicit favorite phrases precede those tiers:
   food/drink items at meals, drinks during drink activities, and activity/toy
   items during play. Unrelated favorites do not displace bedtime choices. The
-  final result is always six case-insensitively unique phrases. A valid AI result
-  is blended with the same maximum of two relevant favorites before it is saved
-  or returned, leaving at least four other choices.
+  final result is always six case-insensitively unique phrases.
 - Ties: higher score, then more recent last use, then case-folded phrase alphabetically. Identical requests return identical phrases.
-- Without AI, `source` is `history` when spoken history is available, otherwise
-  `default` (including a favorite-personalized default). `artifact_version` is
+- `source` is `ai` when a generic AI phrase made the six, otherwise `history`
+  when spoken history is available, otherwise `default` (including favorites and
+  word-bank choices). `artifact_version` is
   always null for now.
-- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the history/default phrases are computed first, then the provider gets `activity`, time bucket, `recent`, the patient's explicit `favorite_items`, and those phrases as JSON data and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Valid output is personalized as above and sets `source` to `ai`. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Prediction response shapes are unchanged, and `recent` is still never stored. Other patients' favorites and raw conversation context are never included.
+- **Optional AI** (`aac/llm.py`): when `PREDICT_PROVIDER` is `openai`, `anthropic`, `gemini` or `bedrock`, the provider gets only `activity` and the time bucket as JSON data, never spoken history, `recent`, favorites, profile facts, transcripts or IDs, and must return exactly six unique, nonblank, single-line phrases of at most 100 characters. Its generic phrases fill slots after the patient's favorites and history, which are applied on the device. A failure, invalid output, or no answer within `PREDICT_TIMEOUT_SECONDS` (default 2) keeps the fallback with 200; there is no retry or repair call. At most 4 AI calls run at once; beyond that, AI is skipped. Prompts and responses are never logged. Prediction response shapes are unchanged, and `recent` is still never stored or sent anywhere.
 - `POST /api/aac/predict` saves activity, time bucket, phrases and source (never `recent`). Unreadable history falls back to defaults with 200; **additive 503** only when the prediction record itself cannot be saved, since returning an unsaved `prediction_id` would break attribution. Unknown/caregiver patient is 404.
 - `POST /api/predict` keeps `{"phrases": [...]}`, uses `LEGACY_DEMO_PATIENT_ID`, saves nothing, and returns defaults (200) if that patient is missing or storage fails.
 
@@ -201,15 +206,18 @@ Caregiver listen mode turns nearby speech into text on the UNO Q. Normally the m
 Client to server, JSON text frames:
 
 ```json
-{ "type": "start" }
+{ "type": "start", "patient_id": "22222222-2222-4222-8222-222222222222" }
 { "type": "stop" }
 ```
+
+`patient_id` is optional; it names the patient whose stored preferences and recent spoken phrases personalize suggestions. An unknown patient or malformed ID gets an `error` and listening does not start. Without it, suggestions are generic. `topic_threshold` is optional too: the topic-match cutoff for the on-device model from the board's input settings, 0.25 to 0.75 (default 0.45). Higher means fewer, surer topic cards and more general choices; it has no effect when the model is off. Sending `start` again while listening applies new settings and clears the follow-up lines.
 
 Server to client:
 
 ```json
 { "type": "state", "listening": true }
 { "type": "transcript", "seq": 1, "text": "Do you want juice?" }
+{ "type": "suggestions", "seq": 1, "topic": "Drinks", "phrases": ["Yes", "No", "Juice please", "Water please", "I am thirsty", "Something else"] }
 { "type": "error", "message": "Another connection is already listening." }
 ```
 
@@ -220,11 +228,20 @@ Server to client:
 - If the transcription model falls behind, the oldest waiting phrase is dropped (logged without content).
 - Browser origin rules are the same as `/ws/input/`. Clients that send no `Origin` header (scripts) are allowed.
 - While the board speaks, listening hears silence. Each successful `POST /api/speak` or `/api/aac/speak` blanks the microphone for the clip's length plus 1.5 s (4 s when casting to the Google Home), so the board's own voice is not transcribed. A phrase in progress ends normally. The frontend's backup voice (browser speech when `/api/speak` fails) does not go through the backend: send `stop` before it and `start` after.
-- The frontend keeps up to three bounded phrases in memory and matches reviewed
-  local topics (drinks, food, play, feelings, bathroom, school, bedtime). A known
-  topic supplies exactly six curated choices to the prediction row. Unknown topics
-  keep the normal time/activity/history/AI suggestions. This is deterministic local
-  matching, not a hosted model call; no new WebSocket message is needed.
+- After each `transcript`, the server sends `suggestions` with the same `seq`:
+  exactly six distinct choices for that phrase, using it and up to two earlier
+  phrases for follow-ups, plus the word-bank topic label (or `null`). Empty
+  `phrases` means no conversation choices: keep the normal predictions. Ignore a
+  `suggestions` older than the newest one shown. The server keeps those three
+  phrases in memory only for this and clears them on stop, disconnect or error.
+- Choices come from `aac/conversation.py` on the device: options named in the
+  question, Yes/No for yes/no questions, caregiver-confirmed profile facts,
+  matching custom vocabulary and `backend/aac/wordbank.json` phrases, ending with
+  "Something else" (and "I don't know" when a personal answer is not on file).
+  The optional on-device MiniLM model (`EMBED_PROVIDER=minilm`) picks the topic and
+  ranks phrases; when it is off, failing or slower than `PREDICT_TIMEOUT_SECONDS`,
+  word-bank keywords pick the topic. `start` warms the model in the background.
+  Nothing here calls a hosted service.
 - Displaying a suggestion never selects, speaks, logs, or confirms it. New context
   clears an active prediction-row scan so a different phrase cannot silently replace
   the current selection. Stop, playback pause, disconnect, and errors clear context.

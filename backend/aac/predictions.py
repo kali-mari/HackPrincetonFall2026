@@ -1,5 +1,8 @@
 """Deterministic patient-scoped phrase ranking from confirmed spoken history."""
 
+import re
+
+from . import wordbank
 from .validation import InvalidRequest, validate_fields, validate_string, validate_timestamp
 
 PHRASE_COUNT = 6
@@ -77,20 +80,40 @@ def favorite_phrases(favorites, activity):
     return [f'I want {item}' for item in items[:2]]
 
 
-def personalize_phrases(phrases, activity, favorites):
-    """Keep a maximum of two favorites plus varied AI/history choices, exactly six."""
-    result, seen = [], set()
-    for phrase in [*favorite_phrases(favorites, activity), *phrases, *DEFAULT_PHRASES]:
-        if normalize(phrase) not in seen:
-            seen.add(normalize(phrase))
-            result.append(phrase)
-        if len(result) == PHRASE_COUNT:
-            break
-    return result
+# Word-bank topics for the board's activity names; other activities match topic keywords.
+ACTIVITY_TOPICS = (
+    ({'breakfast', 'lunch', 'dinner', 'snack', 'meal', 'mealtime'}, ('food', 'drink')),
+    ({'drink', 'drinks', 'water break'}, ('drink',)),
+    ({'after school'}, ('after_school', 'play')),
+    ({'play', 'recess', 'free time'}, ('play',)),
+    ({'bedtime', 'night', 'nap'}, ('bedtime',)),
+    ({'school', 'class', 'classes'}, ('school',)),
+    ({'bathroom', 'toilet', 'potty'}, ('hygiene',)),
+)
 
 
-def predict_phrases(events, activity, bucket, now, favorites=None):
-    """Return (six phrases, source). Narrow context first, then broader, then defaults."""
+def activity_phrases(activity):
+    """Generic word-bank phrases for the activity, from the local bank (no patient data)."""
+    bank = wordbank.load()
+    activity = normalize(activity)
+    topics = next((topics for names, topics in ACTIVITY_TOPICS if activity in names), None)
+    if topics is None:
+        found = set(re.findall(r'[a-z]+', activity))
+        topics = tuple(topic_id for topic_id, topic in bank['topics'].items() if found & set(topic['keywords']))
+    phrases = [phrase for topic_id in topics for phrase in wordbank.topic_phrases(bank, topic_id)]
+    # Unprompted, lead with things to ask for; refusals ("No thank you") come last.
+    return [phrase['text'] for phrase in sorted(phrases, key=lambda phrase: phrase['intent'] == 'refusal')]
+
+
+def predict_phrases(events, activity, bucket, now, favorites=None, generic=None):
+    """Return (six phrases, source), all decided on the device.
+
+    Order: up to two relevant favorites, the patient's spoken history (narrow context
+    first, then broader), the optional hosted model's generic phrases for this
+    activity and time (`generic`; it never sees patient data), word-bank phrases for
+    the activity, then defaults. `source` is 'ai' when a generic AI phrase made the
+    six, else 'history' with spoken history, else 'default'.
+    """
     activity = normalize(activity)
     same_activity = [event for event in events if event.activity and normalize(event.activity) == activity]
     tiers = (
@@ -112,6 +135,9 @@ def predict_phrases(events, activity, bucket, now, favorites=None):
     take(favorite_phrases(favorites or {}, activity))
     for tier in tiers:
         take(rank(tier, now))
-    source = 'history' if events else 'default'
+    personal = len(phrases)
+    take(generic or [])
+    source = 'ai' if len(phrases) > personal else 'history' if events else 'default'
+    take(activity_phrases(activity))
     take(DEFAULT_PHRASES)
     return phrases, source

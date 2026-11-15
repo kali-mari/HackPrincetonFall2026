@@ -63,13 +63,18 @@ export async function predict(patientId: string, time: Date, recent: string[]): 
 export type LogEvent = { event_id: string; kind: string; text: string; timestamp: string; activity: string | null }
 
 export type FavoriteItems = { foods?: string[]; drinks?: string[]; activities?: string[] }
+export type AboutItems = { classes?: string[]; interests?: string[]; people?: string[] }
 export type PatientPreferences = {
   scan_interval_ms: number
   input_modes: ('button' | 'keyboard')[]
   default_activity: string
   voice_id?: string
   favorites?: FavoriteItems
+  about?: AboutItems
+  vocabulary?: string[]
 }
+// Caregiver-entered facts; suggestions and selections never write these.
+export type ProfileDetails = Pick<PatientPreferences, 'favorites' | 'about' | 'vocabulary'>
 
 export type CaregiverProfile = { id: string; display_name: string; role: 'caregiver' }
 export type PatientProfile = { id: string; display_name: string; role: 'patient'; timezone: string; language: 'en'; preferences: PatientPreferences }
@@ -80,16 +85,16 @@ export async function patientPreferences(patientId: string): Promise<PatientPref
   return ((await res.json()) as { preferences: PatientPreferences }).preferences
 }
 
-export async function saveFavorites(patientId: string, favorites: FavoriteItems): Promise<FavoriteItems> {
+export async function saveProfileDetails(patientId: string, details: ProfileDetails): Promise<PatientPreferences> {
   // PATCH replaces the whole preferences object: reread it so input/voice settings survive.
   const preferences = await patientPreferences(patientId)
   const res = await fetch(`/api/profile/patients/${patientId}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ preferences: { ...preferences, favorites } }),
+    body: JSON.stringify({ preferences: { ...preferences, ...details } }),
     signal: AbortSignal.timeout(10_000),
   })
-  if (!res.ok) throw new Error(`Saving favorites failed with ${res.status}`)
-  return ((await res.json()) as { preferences: PatientPreferences }).preferences.favorites ?? {}
+  if (!res.ok) throw new Error(`Saving profile details failed with ${res.status}`)
+  return ((await res.json()) as { preferences: PatientPreferences }).preferences
 }
 
 // Newest first. shortcut: one page of 100 events, page with next_cursor if a day ever exceeds that.
