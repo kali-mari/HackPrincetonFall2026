@@ -6,6 +6,36 @@
   overflow: hidden;
 }
 
+.conversation {
+  position: absolute;
+  inset: 8px 8px auto;
+  height: 136px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: white;
+  color: var(--color-ink);
+  border: 3px solid currentColor;
+  border-radius: 12px;
+}
+
+.conversation > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.conversation p {
+  margin: 8px 0 0;
+  max-height: 80px;
+  overflow: auto;
+}
+
+.conversation button {
+  min-width: 120px;
+  min-height: 120px;
+}
+
 /* Centered and scaled as one fixed-size piece, so a smaller window never moves anything. */
 .board {
   position: absolute;

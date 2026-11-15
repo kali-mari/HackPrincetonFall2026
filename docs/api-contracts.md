@@ -182,7 +182,7 @@ Conversation Mode remains a separate local-only stretch feature. Raw audio/trans
 
 ## Listen mode WebSocket (`WS /ws/conversation/`)
 
-Caregiver listen mode turns nearby speech into text on the UNO Q. The microphone is attached to the board and recorded by the backend; no audio or text leaves the device, and nothing is stored or logged. The `LISTEN` input above stays the toggle: when the frontend receives it, it sends `start` or `stop` on this socket.
+Caregiver listen mode turns nearby speech into text on the UNO Q. Normally the microphone is attached to the board and recorded by the backend. The optional MacBook demo source streams microphone audio over a local USB ADB tunnel instead; see [device testing](device-testing.md). Neither topology uses hosted transcription or persists audio/transcripts. The `LISTEN` input above stays the toggle: when the frontend receives it, it sends `start` or `stop` on this socket.
 
 Client to server, JSON text frames:
 

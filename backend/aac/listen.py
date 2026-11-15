@@ -100,6 +100,14 @@ class Listener:
         self.stopped.set()
         if self.process and self.process.poll() is None:
             self.process.terminate()
+            # FFmpeg may try to flush a full stdout pipe after SIGTERM, while
+            # _record has already stopped reading it. Bound shutdown so its TCP
+            # source (and the Mac mic relay) cannot remain open indefinitely.
+            try:
+                self.process.wait(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
 
     def _record(self, vad):
         started = None  # wall time of the first sample, for phrase delays
