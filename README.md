@@ -11,7 +11,6 @@ UNO Q Docker deployment: see [the deployment guide](docs/deployment.md) for ARM6
 - [System Architecture](#-system-architecture)
 - [How It Works (Demo & User Flow)](#-how-it-works-demo--user-flow)
 - [Privacy-First Hybrid AI Design](#-privacy-first-hybrid-ai-design)
-- [Target Tracks & Impact](#-target-tracks--impact)
 - [Repository Structure & Quickstart](#-repository-structure--quickstart)
 - [Credits & Licensing](#-credits--licensing)
 - [Contributors](#-contributors)
@@ -148,30 +147,6 @@ Assistive medical technology demands uncompromising data privacy. SaySo guarante
 - **Google Gemini Optimization:**
   - Uses `gemini-3.5-flash-lite` with `ThinkingLevel.MINIMAL` to guarantee responses within a hard **2-second deadline**.
   - Enforces structured JSON output via `response_json_schema` specifying exactly 6 child-friendly phrases under 100 characters.
-
----
-
-## 🏆 Target Tracks & Impact
-
-### 🌟 Best Use of Gemini API
-* Leverages Google Gemini 3.5 Flash-Lite's low latency and native structured JSON schema enforcement (`response_json_schema`) to generate conversational predictions under a hard 2-second real-time deadline.
-* Establishes a zero-PII architectural privacy boundary: sensitive health data remains local, while Gemini is queried with sanitized environmental context only.
-
-### 🏥 Best Healthcare Hack
-* Solves communicative isolation for individuals with cerebral palsy, ALS, stroke, apraxia, and autism.
-* Follows clinical speech-language pathology standards (Fitzgerald Key colors, Atkinson Hyperlegible typography) and includes a dedicated Caregiver / SLP dashboard for therapy progress tracking.
-
-### ⚙️ Best Hardware Hack
-* Embedded computing via Arduino Uno R3 / Uno Q with a 50ms debounce window, dual-button chords, and bare-metal 4-bit parallel register control of an HD44780 16x2 LCD display.
-* Real-time physical-digital bridge converting 9600 baud serial pulses into non-blocking JSON WebSockets.
-
-### 🤖 Best Physical AI Hack
-* A unified cyber-physical appliance: tactile button events directly trigger on-device acoustic models (Silero VAD + Moonshine Tiny on edge CPU threads), feed generative cloud predictions (Gemini), and output live physical audio.
-
-### 💡 Best Practical AI Innovation
-* **Agentic Turn-Taking:** Transitions AAC from a passive, slow catalog to an active conversational partner that listens and infers intent.
-* **Fail-Safe Resilience:** Features instant offline fallback to deterministic local vocabulary and browser speech synthesis—the user is never silenced if the network drops.
-
 ---
 
 ## 📂 Repository Structure & Quickstart
