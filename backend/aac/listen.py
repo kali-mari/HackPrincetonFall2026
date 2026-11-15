@@ -37,6 +37,12 @@ def pause(seconds):
     """Treat the microphone as silent for the next seconds (extends, never shortens)."""
     global _pause_until
     _pause_until = max(_pause_until, time.monotonic() + seconds)
+    if settings.INFERENCE_SOCKET:
+        from .inference_client import request, InferenceUnavailable
+        try:
+            request({'op': 'pause', 'seconds': seconds}, timeout=1)
+        except InferenceUnavailable:
+            log.warning('Could not pause local inference: service unavailable')
 
 
 def capture_command(device):
@@ -80,10 +86,16 @@ class Listener:
         self.phrases = queue.Queue()
         self.process = None
         self.paced = False  # a file source is read at real-time speed, like a microphone
+        self.remote = None
 
     def start(self):
         """Load the models and start recording. Blocks for the model load (seconds the
         first time); raises TranscriptionUnavailable if anything is missing."""
+        if settings.INFERENCE_SOCKET:
+            from .inference_client import RemoteListener
+            self.remote = RemoteListener(self.on_text, self.on_end)
+            self.remote.start()
+            return
         transcription.load()
         vad = load_vad()
         self.paced = settings.LISTEN_DEVICE.startswith('file:')
@@ -99,6 +111,8 @@ class Listener:
     def stop(self):
         """Stop recording and discard phrases not yet transcribed. Safe to repeat."""
         self.stopped.set()
+        if self.remote:
+            self.remote.stop()
         if self.process and self.process.poll() is None:
             self.process.terminate()
             # FFmpeg may try to flush a full stdout pipe after SIGTERM, while
@@ -109,6 +123,13 @@ class Listener:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+        # Wake a decoder blocked waiting for a phrase, and release queued audio.
+        while True:
+            try:
+                self.phrases.get_nowait()
+            except queue.Empty:
+                break
+        self.phrases.put(('end', None))
 
     def _record(self, vad):
         started = None  # wall time of the first sample, for phrase delays

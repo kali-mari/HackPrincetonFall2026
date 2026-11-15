@@ -2,7 +2,10 @@
 > **HackPrinceton Fall 2026**  
 > *A low-cost, open-source, privacy-first physical computing AAC (Augmentative and Alternative Communication) platform empowering nonverbal individuals through tactile hardware, on-device intelligence, and Google Gemini.*
 
----
+UNO Q Docker deployment: see [the deployment guide](docs/deployment.md) for ARM64
+images, persistent storage, local inference, and microphone/button setup.
+
+## Credits
 
 ## 📖 Table of Contents
 - [The Problem](#-the-problem)

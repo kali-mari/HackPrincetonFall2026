@@ -1,0 +1,119 @@
+name: smart-aac
+
+x-runtime: &runtime
+  restart: unless-stopped
+  init: true
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  tmpfs: ['/tmp:size=64m,mode=1777']
+  logging:
+    driver: json-file
+    options: {max-size: 5m, max-file: '2'}
+
+services:
+  backend:
+    <<: *runtime
+    image: smart-aac-backend:${AAC_IMAGE_TAG:-local}
+    platform: ${AAC_PLATFORM:-linux/arm64}
+    build: {context: ./backend, target: backend}
+    env_file: [./backend/.env]
+    environment:
+      DJANGO_DEBUG: 'false'
+      SQLITE_PATH: /data/db.sqlite3
+      MEDIA_ROOT: /media
+      STATIC_ROOT: /static
+      INFERENCE_SOCKET: /run/aac/inference.sock
+      EMBED_PROVIDER: ${AAC_EMBED_PROVIDER:-minilm}
+    volumes:
+      - database:/data
+      - media:/media
+      - static:/static
+      - inference-socket:/run/aac
+    mem_limit: 640m
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/openapi.json', timeout=3).close()"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  frontend:
+    <<: *runtime
+    image: smart-aac-frontend:${AAC_IMAGE_TAG:-local}
+    platform: ${AAC_PLATFORM:-linux/arm64}
+    build: {context: ./frontend}
+    ports:
+      - '${AAC_BIND_ADDRESS:-127.0.0.1}:${AAC_FRONTEND_PORT:-5173}:8080'
+      # Keep the existing backend contract and host bridge URL usable.
+      - '${AAC_BIND_ADDRESS:-127.0.0.1}:${AAC_BACKEND_PORT:-8000}:8080'
+    volumes:
+      - media:/media:ro
+      - static:/static:ro
+    depends_on:
+      backend: {condition: service_healthy}
+    mem_limit: 96m
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8080/healthz']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  inference:
+    <<: *runtime
+    image: smart-aac-inference:${AAC_IMAGE_TAG:-local}
+    platform: ${AAC_PLATFORM:-linux/arm64}
+    build: {context: ./backend, target: inference}
+    profiles: [conversation]
+    # No network interface, provider credentials, database or generated audio.
+    network_mode: none
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      INFERENCE_SERVER_SOCKET: /run/aac/inference.sock
+      TRANSCRIBE_PROVIDER: moonshine
+      TRANSCRIBE_MODEL_DIR: /models/moonshine-tiny-en
+      TRANSCRIBE_THREADS: '2'
+      TRANSCRIBE_DEVICE: cpu
+      LISTEN_VAD_MODEL: /models/silero_vad.onnx
+      LISTEN_DEVICE: ${AAC_LISTEN_DEVICE:-plughw:0,0}
+      EMBED_PROVIDER: ${AAC_EMBED_PROVIDER:-minilm}
+      EMBED_MODEL_DIR: /models/minilm-l6-v2
+      EMBED_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+    volumes:
+      - models:/models:ro
+      - inference-socket:/run/aac
+    mem_limit: 1100m
+    stop_grace_period: 5s
+    healthcheck:
+      test: [CMD, python, -c, "import os; os.environ['INFERENCE_SOCKET']='/run/aac/inference.sock'; from aac.inference_client import request; assert request({'op':'health'},timeout=3)['ready']"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+  models:
+    image: smart-aac-inference:${AAC_IMAGE_TAG:-local}
+    platform: ${AAC_PLATFORM:-linux/arm64}
+    build: {context: ./backend, target: inference}
+    profiles: [tools]
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:size=256m,mode=1777']
+    environment:
+      TRANSCRIBE_PROVIDER: moonshine
+      TRANSCRIBE_MODEL_DIR: /models/moonshine-tiny-en
+      LISTEN_VAD_MODEL: /models/silero_vad.onnx
+      EMBED_MODEL_DIR: /models/minilm-l6-v2
+    volumes: [models:/models]
+    command: [python, deploy_models.py]
+
+volumes:
+  database:
+  media:
+  static:
+  models:
+  inference-socket:

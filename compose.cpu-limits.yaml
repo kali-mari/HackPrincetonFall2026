@@ -1,0 +1,9 @@
+# Optional on hosts whose container cgroups expose cpu.max. The checked UNO Q
+# does not, so CPU quotas must not be part of the default deployment.
+services:
+  frontend:
+    cpus: 0.5
+  backend:
+    cpus: 1.5
+  inference:
+    cpus: 2

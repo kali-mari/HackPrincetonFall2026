@@ -1,0 +1,9 @@
+#!/bin/sh
+# Run from any directory. Explicit files avoid auto-loading unrelated overrides.
+set -eu
+cd "$(dirname "$0")/.."
+if [ ! -f deploy/unoq.env ]; then
+    echo 'Copy deploy/unoq.env.example to deploy/unoq.env first.' >&2
+    exit 1
+fi
+exec docker compose --env-file deploy/unoq.env -f compose.yaml -f compose.unoq.yaml "$@"

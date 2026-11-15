@@ -55,6 +55,7 @@ export default function Onboarding(props: Props) {
           <span className={styles.brandMark} aria-hidden>◔</span> Smart AAC Board
         </a>
         <header className={styles.intro}>
+          <a href="#/engine">Explore the engine with a seeded demo →</a>
           <p className={styles.eyebrow}>{props.caregiver ? 'Your device, your profiles' : 'Welcome. Let’s get you set up.'}</p>
           <h1>{step === 'choose' ? 'Who’s using the board?' : step === 'caregiver' ? 'Set up a caregiver profile'
             : step === 'patient' ? 'Set up a patient profile' : 'Use an existing caregiver profile'}</h1>
