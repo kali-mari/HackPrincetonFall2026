@@ -13,6 +13,27 @@ For the two-board USB setup (Mac bridge/frontend, UNO Q backend/SQLite), see
 mode through a local USB tunnel. It captures only during an active listening
 session; see the same guide for setup. This is separate from the A0 vocal switch.
 
+## Single-board setup (UNO Q only)
+
+Everything can run on the Arduino UNO Q with no UNO R3 and no Mac bridge:
+
+- `unoq_board/`: Arduino app whose sketch runs on the UNO Q's microcontroller. It reads the five buttons on D2-D6 (same wiring and tokens as below, including the PREV + NEXT listen chord) and drives a 16x2 LCD1602 on D7-D12 (RS D7, E D8, D4 D9, D5 D10, D6 D11, D7 D12, RW to GND). There is no vocal switch in this setup.
+- `unoq_bridge.py`: runs on the UNO Q's Linux side. It forwards button presses to `ws://127.0.0.1:8000/ws/input/` and writes CPU %, RAM used, load and running jobs to the LCD once a second. It talks to the sketch through the board's Bridge (`arduino-router`), not a serial port.
+
+On the board (over `adb shell`; `TMPDIR=/tmp` is needed because adb sets a temp folder that does not exist):
+
+```bash
+# 1. Build, flash and start the sketch. Copy unoq_board/ to /home/arduino/ArduinoApps/aac-board first.
+#    Keep the app running: stopping it also stops the sketch.
+TMPDIR=/tmp arduino-app-cli app start user:aac-board
+
+# 2. Install the bridge dependencies into the backend's Python, then start it.
+/home/arduino/aac-integration/backend/.venv/bin/python -m pip install -r /home/arduino/hardware/requirements.txt
+/home/arduino/aac-integration/backend/.venv/bin/python /home/arduino/hardware/unoq_bridge.py
+```
+
+The sketch avoids the LiquidCrystal library so the board does not need to download anything to build it.
+
 ## Wiring
 
 Buttons use `INPUT_PULLUP`: wire each one between its pin and GND (pressed = LOW). No resistors needed.

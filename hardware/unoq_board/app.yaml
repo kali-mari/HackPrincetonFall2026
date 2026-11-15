@@ -1,0 +1,3 @@
+name: AAC board
+icon: 📟
+description: Reads the five AAC buttons (D2-D6) and drives the 16x2 status LCD (D7-D12) on the UNO Q.
