@@ -15,7 +15,7 @@
 | Learning (9 operations) | Wired as scaffolds: JSON 501; transport errors use 400/405 |
 | `WS /ws/input/` | Implemented: Channels relay (`aac/consumers.py`), message validation, browser origin check, no echo |
 | `WS /ws/conversation/` | Implemented: caregiver listen mode. On-device mic capture, voice detection and transcription; numbered phrases to the one connection that started it (`aac/listen.py`, `aac/consumers.py`) |
-| Conversation Mode topic timeline and suggestions | Six local browser suggestions implemented from the rolling transcript; saved timeline remains stretch design, with no contract |
+| Conversation Mode topic timeline and suggestions | Six on-device suggestions per phrase over `WS /ws/conversation/` (`aac/conversation.py`, word bank, optional MiniLM); saved timeline remains stretch design, with no contract |
 
 The **contract/documentation layer, HTTP route scaffolds, profile operations, event history, deterministic/AI predictions and speech** are implemented. Each operation carries `x-implementation-status` (`implemented` or `scaffolded`); scaffolds also have `[SCAFFOLD]` in their Swagger summary. Swagger's Try it out is enabled. Scaffold success examples describe target behavior; they are never returned as fake successes.
 
@@ -207,15 +207,18 @@ Caregiver listen mode turns nearby speech into text on the UNO Q. Normally the m
 Client to server, JSON text frames:
 
 ```json
-{ "type": "start" }
+{ "type": "start", "patient_id": "22222222-2222-4222-8222-222222222222" }
 { "type": "stop" }
 ```
+
+`patient_id` is optional; it names the patient whose stored preferences and recent spoken phrases personalize suggestions. An unknown patient or malformed ID gets an `error` and listening does not start. Without it, suggestions are generic.
 
 Server to client:
 
 ```json
 { "type": "state", "listening": true }
 { "type": "transcript", "seq": 1, "text": "Do you want juice?" }
+{ "type": "suggestions", "seq": 1, "topic": "Drinks", "phrases": ["Yes", "No", "Juice please", "Water please", "I am thirsty", "Something else"] }
 { "type": "error", "message": "Another connection is already listening." }
 ```
 
@@ -226,11 +229,20 @@ Server to client:
 - If the transcription model falls behind, the oldest waiting phrase is dropped (logged without content).
 - Browser origin rules are the same as `/ws/input/`. Clients that send no `Origin` header (scripts) are allowed.
 - While the board speaks, listening hears silence. Each successful `POST /api/speak` or `/api/aac/speak` blanks the microphone for the clip's length plus 1.5 s (4 s when casting to the Google Home), so the board's own voice is not transcribed. A phrase in progress ends normally. The frontend's backup voice (browser speech when `/api/speak` fails) does not go through the backend: send `stop` before it and `start` after.
-- The frontend keeps up to three bounded phrases in memory and matches reviewed
-  local topics (drinks, food, play, feelings, bathroom, school, bedtime). A known
-  topic supplies exactly six curated choices to the prediction row. Unknown topics
-  keep the normal time/activity/history/AI suggestions. This is deterministic local
-  matching, not a hosted model call; no new WebSocket message is needed.
+- After each `transcript`, the server sends `suggestions` with the same `seq`:
+  exactly six distinct choices for that phrase, using it and up to two earlier
+  phrases for follow-ups, plus the word-bank topic label (or `null`). Empty
+  `phrases` means no conversation choices: keep the normal predictions. Ignore a
+  `suggestions` older than the newest one shown. The server keeps those three
+  phrases in memory only for this and clears them on stop, disconnect or error.
+- Choices come from `aac/conversation.py` on the device: options named in the
+  question, Yes/No for yes/no questions, caregiver-confirmed profile facts,
+  matching custom vocabulary and `backend/aac/wordbank.json` phrases, ending with
+  "Something else" (and "I don't know" when a personal answer is not on file).
+  The optional on-device MiniLM model (`EMBED_PROVIDER=minilm`) picks the topic and
+  ranks phrases; when it is off, failing or slower than `PREDICT_TIMEOUT_SECONDS`,
+  word-bank keywords pick the topic. `start` warms the model in the background.
+  Nothing here calls a hosted service.
 - Displaying a suggestion never selects, speaks, logs, or confirms it. New context
   clears an active prediction-row scan so a different phrase cannot silently replace
   the current selection. Stop, playback pause, disconnect, and errors clear context.

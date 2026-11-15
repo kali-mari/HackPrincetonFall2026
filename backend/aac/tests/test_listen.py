@@ -4,6 +4,8 @@ import sys
 import subprocess
 import time
 import threading
+from datetime import datetime, timezone
+from uuid import uuid4
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import IsolatedAsyncioTestCase
@@ -11,11 +13,12 @@ from unittest.mock import patch
 
 from channels.testing import WebsocketCommunicator
 from jsonschema import Draft202012Validator
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from aac import consumers, listen
 from aac.consumers import ConversationConsumer
 from aac.listen import Listener, capture_command
+from aac.models import CommunicationEvent, Profile
 from aac.openapi import SCHEMAS
 from aac.transcription import TranscriptionUnavailable
 from config.asgi import application
@@ -219,6 +222,7 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         patcher = patch.object(consumers, 'Listener', FakeListener)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.enterContext(override_settings(EMBED_PROVIDER=''))  # keyword suggestions: no model needed
         self.open = []
 
     async def asyncTearDown(self):
@@ -246,11 +250,21 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
             self.assertEqual(await ws.receive_json_from(), {'type': 'state', 'listening': False})
         return ws, connected
 
-    async def start(self, ws):
-        Draft202012Validator(SCHEMAS['ConversationClientMessage']).validate({'type': 'start'})
-        await ws.send_json_to({'type': 'start'})
+    async def start(self, ws, message=None):
+        message = message or {'type': 'start'}
+        Draft202012Validator(SCHEMAS['ConversationClientMessage']).validate(message)
+        await ws.send_json_to(message)
         self.assertEqual(await ws.receive_json_from(), {'type': 'state', 'listening': True})
         return FakeListener.instances[-1]
+
+    async def say(self, ws, listener, text):
+        """Emit one phrase; return the suggestions message that follows its transcript."""
+        listener.emit(text)
+        transcript = await ws.receive_json_from()
+        self.assertEqual((transcript['type'], transcript['text']), ('transcript', text))
+        suggestions = await ws.receive_json_from()
+        self.assertEqual((suggestions['type'], suggestions['seq']), ('suggestions', transcript['seq']))
+        return suggestions
 
     async def test_start_streams_numbered_transcripts_then_stop(self):
         ws, _ = await self.connect()
@@ -258,6 +272,7 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         for seq, text in enumerate(['Time for lunch.', 'Do you want juice?'], 1):
             listener.emit(text)
             self.assertEqual(await ws.receive_json_from(), {'type': 'transcript', 'seq': seq, 'text': text})
+            self.assertEqual((await ws.receive_json_from())['seq'], seq)  # its suggestions
         await ws.send_json_to({'type': 'stop'})
         self.assertEqual(await ws.receive_json_from(), {'type': 'state', 'listening': False})
         self.assertTrue(listener.stopped)
@@ -279,7 +294,60 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         with patch.object(consumers.conversation, 'warm') as warm:
             ws, _ = await self.connect()
             await self.start(ws)
-        warm.assert_called_once_with()
+        warm.assert_called_once_with({})
+
+    async def test_each_phrase_gets_six_local_suggestions(self):
+        ws, _ = await self.connect()
+        listener = await self.start(ws)
+        result = await self.say(ws, listener, 'Do you want water or juice?')
+        self.assertEqual(result['topic'], 'Drinks')
+        self.assertEqual(len(result['phrases']), 6)
+        self.assertEqual(result['phrases'][:2], ['Water', 'Juice'])
+
+    async def test_unrelated_statement_sends_no_phrases(self):
+        ws, _ = await self.connect()
+        listener = await self.start(ws)
+        result = await self.say(ws, listener, 'I am going to make a phone call.')
+        self.assertEqual((result['topic'], result['phrases']), (None, []))
+
+    async def test_patient_facts_personalize_suggestions(self):
+        patient_id = '22222222-2222-4222-8222-222222222222'
+        context = ({'about': {'classes': ['Art', 'Music']}}, ['I feel sad'])
+        with patch.object(consumers, 'suggestion_context', return_value=context) as load:
+            ws, _ = await self.connect()
+            listener = await self.start(ws, {'type': 'start', 'patient_id': patient_id})
+        self.assertEqual(str(load.call_args.args[0]), patient_id)
+        result = await self.say(ws, listener, 'What classes are you taking?')
+        self.assertEqual(result['phrases'][:2], ['Art', 'Music'])
+
+    async def test_unknown_or_invalid_patient_is_an_error_and_does_not_listen(self):
+        ws, _ = await self.connect()
+        with patch.object(consumers, 'suggestion_context', side_effect=consumers.Profile.DoesNotExist):
+            await ws.send_json_to({'type': 'start', 'patient_id': '33333333-3333-4333-8333-333333333333'})
+            self.assertEqual(await ws.receive_json_from(), {'type': 'error', 'message': 'Patient not found.'})
+        await ws.send_json_to({'type': 'start', 'patient_id': 'not-a-uuid'})
+        self.assertEqual((await ws.receive_json_from())['type'], 'error')
+        self.assertIsNone(ConversationConsumer.owner)
+        self.assertEqual(FakeListener.instances, [])
+
+    async def test_stop_forgets_earlier_lines(self):
+        ws, _ = await self.connect()
+        listener = await self.start(ws)
+        self.assertEqual((await self.say(ws, listener, 'Are you thirsty?'))['topic'], 'Drinks')
+        self.assertEqual((await self.say(ws, listener, 'What about now?'))['topic'], 'Drinks')  # follow-up
+        await ws.send_json_to({'type': 'stop'})
+        self.assertEqual(await ws.receive_json_from(), {'type': 'state', 'listening': False})
+        listener = await self.start(ws)
+        self.assertIsNone((await self.say(ws, listener, 'What about now?'))['topic'])
+
+    async def test_a_suggestion_failure_keeps_listening(self):
+        ws, _ = await self.connect()
+        listener = await self.start(ws)
+        with patch.object(consumers.conversation, 'suggest', side_effect=RuntimeError('bug')), \
+                self.assertLogs('aac.consumers', 'WARNING'):
+            result = await self.say(ws, listener, 'Are you thirsty?')
+        self.assertEqual(result['phrases'], [])
+        self.assertEqual((await self.say(ws, listener, 'Are you hungry?'))['topic'], 'Food')
 
     async def test_start_twice_is_harmless(self):
         ws, _ = await self.connect()
@@ -306,7 +374,7 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
 
     async def test_invalid_messages_get_an_error_and_stay_connected(self):
         ws, _ = await self.connect()
-        for frame in ('not json', '{"type": "pause"}', '{"type": "start", "x": 1}'):
+        for frame in ('not json', '{"type": "pause"}', '{"type": "start", "x": 1}', '{"type": "stop", "patient_id": null}'):
             await ws.send_to(text_data=frame)
             self.assertEqual((await ws.receive_json_from())['type'], 'error')
         await ws.send_to(bytes_data=b'\x00')
@@ -319,3 +387,23 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         self.assertFalse(connected)
         _, connected = await self.connect([])  # command-line clients send no Origin
         self.assertTrue(connected)
+
+
+class SuggestionContextTest(TestCase):
+    """What listen mode reads for suggestions: confirmed preferences and recent spoken text only."""
+
+    def test_reads_preferences_and_recent_spoken_phrases(self):
+        preferences = {'scan_interval_ms': 1500, 'input_modes': ['button'], 'default_activity': 'play',
+                       'about': {'classes': ['Art']}}
+        patient = Profile.objects.create(role='patient', display_name='Test child', timezone='America/New_York',
+                                         language='en', preferences=preferences)
+        moment = datetime(2026, 11, 14, 17, 0, tzinfo=timezone.utc)
+        for kind, text in (('spoken', 'I feel sad'), ('selection', 'Juice please')):
+            CommunicationEvent.objects.create(id=uuid4(), utterance_id=uuid4(), patient=patient, kind=kind, text=text,
+                                              occurred_at=moment, time_bucket='midday', input_source='button')
+        self.assertEqual(consumers.suggestion_context(patient.pk), (preferences, ['I feel sad']))
+
+    def test_no_patient_and_unknown_patient(self):
+        self.assertEqual(consumers.suggestion_context(None), ({}, []))
+        with self.assertRaises(Profile.DoesNotExist):
+            consumers.suggestion_context(uuid4())

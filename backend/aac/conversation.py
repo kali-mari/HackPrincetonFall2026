@@ -173,7 +173,7 @@ def capitalize(text):
 
 
 def suggest(lines, preferences, recent=()):
-    """{'topic', 'phrases' (exactly six), 'source'} for the newest lines, or None to keep regular predictions.
+    """{'topic', 'label', 'phrases' (exactly six), 'source'} for the newest lines, or None to keep regular predictions.
 
     `recent` is the patient's recent spoken phrases, newest first, used only as a small ranking boost.
     """
@@ -240,4 +240,5 @@ def suggest(lines, preferences, recent=()):
         if normalize(text) not in seen:
             seen.add(normalize(text))
             result.append(text)
-    return {'topic': topic_id, 'phrases': result + meta, 'source': 'model' if vectors else 'keywords'}
+    return {'topic': topic_id, 'label': topic['label'] if topic else None,
+            'phrases': result + meta, 'source': 'model' if vectors else 'keywords'}

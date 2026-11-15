@@ -4,12 +4,17 @@ WS /ws/conversation/ runs caregiver listen mode for the one connection that star
 import asyncio
 import logging
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.conf import settings
+from django.db import DatabaseError
 
 from . import conversation
 from .listen import Listener
+from .models import Profile
+from .predictions import recent_spoken
 from .transcription import TranscriptionUnavailable
+from .validation import InvalidRequest, validate_uuid
 
 log = logging.getLogger(__name__)
 
@@ -78,18 +83,39 @@ class InputConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json(event["message"])
 
 
+RECENT_PHRASES = 50  # recent spoken phrases that may lift a matching suggestion
+
+
+def suggestion_context(patient_id):
+    """(preferences, recent spoken texts) for suggestions; ({}, []) without a patient.
+
+    Raises Profile.DoesNotExist or DatabaseError when the patient cannot be read.
+    """
+    if patient_id is None:
+        return {}, []
+    patient = Profile.objects.get(pk=patient_id, role=Profile.Role.PATIENT)
+    try:
+        recent = [event.text for event in recent_spoken(patient)[:RECENT_PHRASES]]
+    except DatabaseError:
+        recent = []  # history is only a ranking boost
+    return patient.preferences or {}, recent
+
+
 class ConversationConsumer(AsyncJsonWebsocketConsumer):
-    """Client sends {"type": "start"} or {"type": "stop"}. Server sends
-    {"type": "state", "listening": bool}, {"type": "transcript", "seq": n, "text": ...}
-    and {"type": "error", "message": ...}. There is one microphone, so one connection
-    listens at a time; closing the connection stops it. Transcripts go only to that
-    connection and are never stored or logged."""
+    """Client sends {"type": "start", "patient_id"?: uuid} or {"type": "stop"}. Server
+    sends {"type": "state", "listening": bool}, {"type": "transcript", "seq": n, "text": ...},
+    {"type": "suggestions", "seq": n, "topic": str|null, "phrases": [six, or none]} and
+    {"type": "error", "message": ...}. There is one microphone, so one connection
+    listens at a time; closing the connection stops it. Transcripts and suggestions go
+    only to that connection and are never stored or logged; the last few lines are kept
+    in memory for follow-up questions and cleared when listening stops."""
 
     owner = None  # the connection currently listening (or starting to)
 
     async def connect(self):
         self.listener = None
         self.seq = 0
+        self.lines, self.preferences, self.recent = [], {}, []
         if not allowed_origin(self.scope):
             await self.close()
             return
@@ -112,25 +138,43 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             return None
 
     async def receive_json(self, content, **kwargs):
-        if content == {"type": "start"}:
-            await self.start_listening()
+        if isinstance(content, dict) and content.get("type") == "start" and set(content) <= {"type", "patient_id"}:
+            try:
+                patient_id = validate_uuid(content["patient_id"], "patient_id") if "patient_id" in content else None
+            except InvalidRequest as error:
+                await self.send_error(str(error))
+                return
+            await self.start_listening(patient_id)
         elif content == {"type": "stop"}:
             self.stop_listening()
             await self.send_json({"type": "state", "listening": False})
         else:
-            await self.send_error('Send {"type": "start"} or {"type": "stop"}.')
+            await self.send_error('Send {"type": "start"} (optionally with "patient_id") or {"type": "stop"}.')
 
-    async def start_listening(self):
+    async def start_listening(self, patient_id=None):
         owner = ConversationConsumer.owner
-        if owner is self:
+        if owner is not None and owner is not self:
+            await self.send_error("Another connection is already listening.")
+            return
+        try:
+            context = await database_sync_to_async(suggestion_context)(patient_id)
+        except Profile.DoesNotExist:
+            await self.send_error("Patient not found.")
+            return
+        except DatabaseError:
+            await self.send_error("Profile storage is unavailable.")
+            return
+        if owner is self:  # already listening, or still starting: a new patient starts fresh context
+            self.lines, (self.preferences, self.recent) = [], context
             if self.listener:
                 await self.send_json({"type": "state", "listening": True})
-            return  # already listening, or still starting
-        if owner is not None:
+            return
+        if ConversationConsumer.owner is not None:  # another connection claimed it meanwhile
             await self.send_error("Another connection is already listening.")
             return
         ConversationConsumer.owner = self
-        conversation.warm()  # background: the suggestion model is ready by the first question
+        self.lines, (self.preferences, self.recent) = [], context
+        conversation.warm(self.preferences)  # background: the suggestion model is ready by the first question
         loop = asyncio.get_running_loop()
         listener = Listener(
             on_text=lambda text, delay: asyncio.run_coroutine_threadsafe(
@@ -154,14 +198,27 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         if self.listener:
             self.listener.stop()
             self.listener = None
+        self.lines, self.preferences, self.recent = [], {}, []  # transcripts and context leave memory
         if ConversationConsumer.owner is self:
             ConversationConsumer.owner = None
 
     async def send_transcript(self, listener, text, delay):
-        if listener is self.listener:  # drop results from a stopped session
-            log.info("Listen mode phrase ready %.2f s after it ended", delay)  # never the text
-            self.seq += 1
-            await self.send_json({"type": "transcript", "seq": self.seq, "text": text})
+        if listener is not self.listener:  # drop results from a stopped session
+            return
+        log.info("Listen mode phrase ready %.2f s after it ended", delay)  # never the text
+        self.seq += 1
+        seq = self.seq
+        await self.send_json({"type": "transcript", "seq": seq, "text": text})
+        self.lines = [*self.lines, text][-conversation.LINES:]
+        try:
+            result = await asyncio.to_thread(conversation.suggest, list(self.lines), self.preferences, self.recent)
+        except Exception as error:  # a bug here must not end listening
+            log.warning("Conversation suggestions failed (%s)", type(error).__name__)
+            result = None
+        if listener is self.listener:  # still the same session after the wait
+            # No phrases means "no conversation choices": the board keeps its regular predictions.
+            await self.send_json({"type": "suggestions", "seq": seq, "topic": result["label"] if result else None,
+                                  "phrases": result["phrases"] if result else []})
 
     async def ended(self, listener, error):
         if listener is self.listener:

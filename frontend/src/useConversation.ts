@@ -1,15 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 
-type State = { phase: 'off' | 'starting' | 'listening' | 'paused'; transcript: string; segments: string[]; error: string }
-const OFF: State = { phase: 'off', transcript: '', segments: [], error: '' }
+// Six on-device answer choices for the newest phrase; computed by the UNO Q, never stored here.
+export type ConversationSuggestions = { seq: number; topic: string | null; phrases: string[] }
+type State = { phase: 'off' | 'starting' | 'listening' | 'paused'; transcript: string; suggestions: ConversationSuggestions | null; error: string }
+const OFF: State = { phase: 'off', transcript: '', suggestions: null, error: '' }
 
-// Context is used only for local suggestions, never hosted predictions or storage.
-export function useConversation(onContextChange?: () => void) {
+export function parseSuggestions(message: unknown): ConversationSuggestions | null | undefined {
+  // undefined: not a valid suggestions message; null: valid, but no choices for this phrase.
+  const data = message as { seq?: unknown; topic?: unknown; phrases?: unknown }
+  if (typeof data?.seq !== 'number' || !(data.topic === null || typeof data.topic === 'string')
+    || !Array.isArray(data.phrases) || !data.phrases.every((phrase) => typeof phrase === 'string')
+    || ![0, 6].includes(data.phrases.length)) return undefined
+  return data.phrases.length ? { seq: data.seq, topic: data.topic, phrases: data.phrases } : null
+}
+
+// Transcripts and suggestions stay in memory for display only, never hosted predictions or storage.
+export function useConversation(patientId: string, onContextChange?: () => void) {
   const [state, setState] = useState<State>(OFF)
   const wanted = useRef(false)
   const playback = useRef(false)
   const socket = useRef<WebSocket | null>(null)
   const latestChange = useRef(onContextChange)
+  const newestSeq = useRef(0)
   useEffect(() => { latestChange.current = onContextChange })
 
   function closeSession(): Promise<void> {
@@ -40,8 +52,9 @@ export function useConversation(onContextChange?: () => void) {
       latestChange.current?.()
       void closeSession()
     }
+    newestSeq.current = 0 // seq restarts with each connection
     current.onopen = () => {
-      if (socket.current === current) current.send(JSON.stringify({ type: 'start' }))
+      if (socket.current === current) current.send(JSON.stringify({ type: 'start', patient_id: patientId }))
     }
     current.onmessage = (event) => {
       if (socket.current !== current) return
@@ -52,8 +65,13 @@ export function useConversation(onContextChange?: () => void) {
           if (message.listening) setState({ ...OFF, phase: 'listening' })
           else { wanted.current = false; setState(OFF); latestChange.current?.(); void closeSession() }
         } else if (message.type === 'transcript' && typeof message.text === 'string') {
-          const text = message.text.slice(-500)
-          setState((value) => ({ ...value, transcript: text, segments: [...value.segments, text].slice(-3) }))
+          setState((value) => ({ ...value, transcript: message.text.slice(-500) }))
+        } else if (message.type === 'suggestions') {
+          const suggestions = parseSuggestions(message)
+          if (suggestions === undefined) throw new Error('Invalid suggestions')
+          if (message.seq < newestSeq.current) return // a slower, older answer
+          newestSeq.current = message.seq
+          setState((value) => ({ ...value, suggestions }))
           latestChange.current?.()
         } else if (message.type === 'error' && typeof message.message === 'string') {
           fail(message.message)

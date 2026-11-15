@@ -453,11 +453,13 @@ SCHEMAS = {
         },
         ("patient_id", "active_artifact_version", "vocabulary_revision"),
     ),
-    "ConversationClientMessage": obj(
-        {"type": enum("start", "stop")},
-        ("type",),
-        description="WS /ws/conversation/ client message: start or stop caregiver listen mode.",
-    ),
+    "ConversationClientMessage": {
+        "oneOf": [
+            obj({"type": enum("start"), "patient_id": UUID}, ("type",)),
+            obj({"type": enum("stop")}, ("type",)),
+        ],
+        "description": "WS /ws/conversation/ client message: start or stop caregiver listen mode. start may name the patient whose confirmed facts, vocabulary and recent speech personalize suggestions (unknown patient: error); without it suggestions are generic.",
+    },
     "ConversationServerMessage": {
         "oneOf": [
             obj({"type": enum("state"), "listening": {"type": "boolean"}}, ("type", "listening")),
@@ -466,8 +468,20 @@ SCHEMAS = {
                 ("type", "seq", "text"),
             ),
             obj({"type": enum("error"), "message": {"type": "string", "minLength": 1}}, ("type", "message")),
+            obj(
+                {
+                    "type": enum("suggestions"),
+                    "seq": {"type": "integer", "minimum": 1},
+                    "topic": {"type": ["string", "null"], "minLength": 1, "maxLength": 60},
+                    "phrases": {
+                        "type": "array", "items": text(100), "uniqueItems": True,
+                        "anyOf": [{"maxItems": 0}, {"minItems": 6, "maxItems": 6}],
+                    },
+                },
+                ("type", "seq", "topic", "phrases"),
+            ),
         ],
-        "description": "WS /ws/conversation/ server message: listening state, one finished phrase (seq counts from 1 per connection), or a safe error message.",
+        "description": "WS /ws/conversation/ server message: listening state, one finished phrase (seq counts from 1 per connection), the six local answer choices for that phrase and the ones before it (suggestions with the same seq; no phrases means keep regular predictions; ignore one older than the newest shown), or a safe error message. Suggestions are computed on the device, never stored, and never selected or spoken automatically.",
     },
     "InputMessage": obj(
         {
@@ -1148,9 +1162,11 @@ def build_openapi():
                 "client_message": ref("ConversationClientMessage"),
                 "server_message": ref("ConversationServerMessage"),
                 "example": [
-                    {"type": "start"},
+                    {"type": "start", "patient_id": "22222222-2222-4222-8222-222222222222"},
                     {"type": "state", "listening": True},
                     {"type": "transcript", "seq": 1, "text": "Do you want juice?"},
+                    {"type": "suggestions", "seq": 1, "topic": "Drinks",
+                     "phrases": ["Yes", "No", "Juice please", "Water please", "I am thirsty", "Something else"]},
                     {"type": "stop"},
                     {"type": "state", "listening": False},
                 ],

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { activityAt, logSentence, patientPreferences, predict, speak, type FavoriteItems, type PatientProfile } from './api'
+import { activityAt, logSentence, predict, speak, type PatientProfile } from './api'
 import Tile from './components/Tile'
 import { CATEGORIES, CORE_WORDS, FALLBACK_PREDICTIONS, type Word, type WordType } from './data/symbols'
 import { next, prev, select, type ScanMark, type ScanState } from './scanning'
@@ -7,7 +7,6 @@ import { EMPTY_STRIP, addWords, clearStrip, deleteLast as deleteFromStrip } from
 import { useSwitchInput, type Action, type Source, type SourceSettings } from './useSwitchInput'
 import { useVoiceSwitch } from './useVoiceSwitch'
 import { useConversation } from './useConversation'
-import { conversationSuggestions } from './conversationSuggestions'
 import styles from './App.module.css'
 import tileStyles from './components/Tile.module.css'
 
@@ -124,7 +123,7 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
   const [sources, setSources] = useState(loadSettings)
   const [playOnHome, setPlayOnHome] = useState(loadPlayOnHome)
   const [sensitivity, setSensitivity] = useState(loadSensitivity)
-  const conversation = useConversation(() => setScan((value) => value?.group === 1 ? null : value))
+  const conversation = useConversation(patient.id, () => setScan((value) => value?.group === 1 ? null : value))
   const listening = conversation.phase === 'listening'
   const showConversation = conversation.active || Boolean(conversation.error)
   const [started, setStarted] = useState(false) // Chrome plays no sound until someone taps the page once
@@ -133,8 +132,8 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
   const clockInput = useRef<HTMLInputElement>(null)
   // Blank until the first reply, so a dead backend never hides behind made-up phrases.
   const [regularPredictions, setRegularPredictions] = useState(BLANK_PREDICTIONS)
-  const [favorites, setFavorites] = useState<FavoriteItems>({})
-  const localSuggestions = listening ? conversationSuggestions(conversation.segments, favorites) : null
+  // While listening, the UNO Q's six answer choices for the newest phrase replace the regular row.
+  const localSuggestions = listening ? conversation.suggestions : null
   const predictions = localSuggestions?.phrases ?? regularPredictions
   const [activity, setActivity] = useState('')
   const [demoTime, setDemoTime] = useState('') // "HH:MM", or empty for the real clock
@@ -196,9 +195,8 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
         time.setHours(hours, minutes, 0, 0)
       }
       setActivity(activityAt(time))
-      const [prediction, profile] = await Promise.allSettled([predict(patient.id, time, recent), patientPreferences(patient.id)])
+      const [prediction] = await Promise.allSettled([predict(patient.id, time, recent)])
       if (stale) return
-      if (profile.status === 'fulfilled') setFavorites(profile.value.favorites ?? {})
       if (prediction.status === 'fulfilled') {
         setRegularPredictions(prediction.value.phrases)
         setScan((value) => value?.group === 1 ? null : value)
@@ -526,7 +524,7 @@ export default function App({ patient, onSwitchProfile }: { patient: PatientProf
       {showConversation && (
         <aside className={styles.conversation} aria-label="Caregiver listen mode">
           <div role="status" aria-live="polite">
-            <strong>{conversation.error ? 'Listening unavailable' : conversation.phase === 'paused' ? 'Listening paused while speaking' : listening ? `Listening${localSuggestions ? ` · ${localSuggestions.topic} suggestions` : ''}` : 'Starting listening…'}</strong>
+            <strong>{conversation.error ? 'Listening unavailable' : conversation.phase === 'paused' ? 'Listening paused while speaking' : listening ? `Listening${localSuggestions ? ` · ${localSuggestions.topic ?? 'Answer'} choices` : ''}` : 'Starting listening…'}</strong>
             <p>{conversation.error || conversation.transcript || 'Speak a short phrase, then pause. Text stays here only while listening.'}</p>
           </div>
           <button onClick={() => void conversation.stop()}>{conversation.error ? 'Dismiss' : 'Stop listening'}</button>
