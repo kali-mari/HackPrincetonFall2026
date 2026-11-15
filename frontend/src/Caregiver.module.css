@@ -42,6 +42,14 @@
   margin-bottom: var(--space-3);
 }
 
+.profileControls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.profileControls label { display: grid; gap: 4px; }
+.profileControls select { min-height: 48px; max-width: 260px; padding: 8px; font: inherit; background: white; color: inherit; border: 1px solid var(--cg-border); border-radius: 8px; }
+.profileControls button { font-size: var(--cg-font-size); border: none; }
+.deviceCode { max-width: var(--cg-page-width); margin: 0 auto 24px; padding: 16px; background: var(--cg-surface); border: 1px solid var(--cg-border); border-radius: 8px; }
+.deviceCode summary { cursor: pointer; font-weight: bold; }
+.deviceCode code { display: block; overflow-wrap: anywhere; margin-top: 8px; user-select: all; }
+
 .muted {
   color: var(--cg-text-muted);
 }

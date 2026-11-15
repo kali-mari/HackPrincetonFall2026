@@ -1,0 +1,40 @@
+.page {
+  min-height: 100vh;
+  padding: 40px 24px 56px;
+  color: var(--cg-text);
+  background: radial-gradient(ellipse at top right, #dcefed 0, transparent 55%), var(--cg-bg);
+  user-select: text;
+}
+.shell { max-width: 960px; margin: 0 auto; }
+.brand { display: inline-flex; align-items: center; gap: 12px; color: var(--cg-accent); font-weight: bold; text-decoration: none; }
+.brandMark { display: grid; place-items: center; width: 44px; height: 44px; background: var(--cg-accent); color: white; border-radius: 14px; font-size: 32px; }
+.intro { margin: 48px 0 32px; max-width: 740px; }
+.eyebrow { color: var(--cg-accent); font-size: 16px; font-weight: bold; }
+.intro h1 { margin: 12px 0 16px; font-size: clamp(32px, 5vw, 52px); line-height: 1.1; letter-spacing: -0.025em; }
+.intro p:last-child { color: var(--cg-text-muted); max-width: 640px; }
+.roles { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.roleCard { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 28px; min-height: 300px; background: white; text-align: left; border: 2px solid #b4c8ca; border-radius: 24px; font-size: 18px; }
+.roleCard:hover { border-color: var(--cg-accent); }
+.roleCard strong { font-size: 28px; }
+.roleCard > span:not(.caregiverIcon, .patientIcon, .action) { color: var(--cg-text-muted); }
+.caregiverIcon, .patientIcon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 20px; font-size: 40px; background: #dcefed; color: var(--cg-accent); }
+.patientIcon { background: var(--tile-people); color: #5d4b00; }
+.action { display: flex; justify-content: space-between; align-items: center; gap: 16px; width: 100%; margin-top: auto; font-weight: bold; color: var(--cg-accent); }
+.panel { margin-top: 24px; padding: 28px; border: 1px solid var(--cg-border); border-radius: 24px; background: white; display: grid; gap: 24px; }
+.panel h2 { margin: 0; font-size: 24px; }
+.panel label { display: grid; gap: 8px; font-weight: bold; }
+.panel input { width: 100%; min-height: 64px; padding: 14px 16px; border: 2px solid var(--cg-border); border-radius: 12px; font: inherit; color: var(--cg-text); background: white; }
+.panel input:focus-visible { outline: 3px solid var(--scan-color); outline-offset: 2px; }
+.formActions, .options { display: flex; gap: 16px; flex-wrap: wrap; }
+.options { margin-top: 24px; }
+.primary, .secondary { min-height: 120px; min-width: 120px; padding: 20px; font-size: 18px; font-weight: bold; border-radius: 16px; }
+.primary { background: var(--cg-accent); color: white; border-color: var(--cg-accent); flex: 1; }
+.secondary { background: white; color: var(--cg-accent); border: 1px solid var(--cg-border); }
+.patientList { display: grid; gap: 12px; }
+.patientList button { justify-content: flex-start; gap: 20px; min-height: 120px; padding: 20px; background: white; color: var(--cg-text); border: 1px solid var(--cg-border); font-size: 22px; }
+.patientList button > span:last-child { margin-left: auto; }
+.avatar { display: grid; place-items: center; min-width: 60px; height: 60px; border-radius: 18px; background: #dcefed; font-weight: bold; color: var(--cg-accent); }
+.connected { color: var(--cg-text-muted); margin-bottom: 20px; }
+.problem { border-left: 4px solid var(--color-error); background: white; padding: 16px; border-radius: 8px; }
+.footer { color: var(--cg-text-muted); font-size: 15px; margin: 32px 0 0; }
+@media (max-width: 650px) { .page { padding: 24px 16px 40px; } .intro { margin-top: 32px; } .roles { grid-template-columns: 1fr; gap: 16px; } .roleCard { min-height: 250px; padding: 24px; } .panel { padding: 20px; } }
