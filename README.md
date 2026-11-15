@@ -2,10 +2,7 @@
 > **HackPrinceton Fall 2026**  
 > *A low-cost, open-source, privacy-first physical computing AAC (Augmentative and Alternative Communication) platform empowering nonverbal individuals through tactile hardware, on-device intelligence, and Google Gemini.*
 
-UNO Q Docker deployment: see [the deployment guide](docs/deployment.md) for ARM64
-images, persistent storage, local inference, and microphone/button setup.
-
-## Credits
+UNO Q Docker deployment: see [the deployment guide](docs/deployment.md) for ARM64 images, persistent storage, local inference, and microphone/button setup.
 
 ## 📖 Table of Contents
 - [The Problem](#-the-problem)
@@ -14,8 +11,10 @@ images, persistent storage, local inference, and microphone/button setup.
 - [System Architecture](#-system-architecture)
 - [How It Works (Demo & User Flow)](#-how-it-works-demo--user-flow)
 - [Privacy-First Hybrid AI Design](#-privacy-first-hybrid-ai-design)
+- [Target Tracks & Impact](#-target-tracks--impact)
 - [Repository Structure & Quickstart](#-repository-structure--quickstart)
 - [Credits & Licensing](#-credits--licensing)
+- [Contributors](#-contributors)
 
 ---
 
@@ -24,8 +23,8 @@ images, persistent storage, local inference, and microphone/button setup.
 Over **5 million individuals** in the United States alone cannot produce speech that meets their daily communication needs due to conditions such as cerebral palsy, ALS, stroke, apraxia, or nonverbal autism.
 
 Today's Augmentative and Alternative Communication (AAC) landscape presents critical barriers:
-1. **The Cost Barrier:** Proprietary, dedicated medical speech devices cost between **$5,000 and $15,000**, with insurance approvals frequently denied or delayed for months.
-2. **The Touchscreen Trap:** Consumer tablets (such as iPads running Proloquo2Go or TD Snap) rely entirely on capacitive glass screens. For children and adults with tremors, spasticity, or limited fine motor control, glass touchscreens cause frequent mis-taps, accidental double activations, physical fatigue, and intense frustration.
+1. **The Cost Barrier:** Proprietary, dedicated medical speech devices cost between **$5,000 and $15,000**, with insurance approvals frequently denied or delayed for months. Even tablet-based alternatives require buying the tablet plus specialized apps that cost **$200 to $300** on their own.
+2. **The Touchscreen Trap:** Consumer tablets rely entirely on capacitive glass screens. For children and adults with tremors, spasticity, or limited fine motor control, glass touchscreens cause frequent mis-taps, accidental double activations, physical fatigue, and intense frustration.
 3. **The Speed Barrier:** Traditional static symbol grids require navigating deeply nested category trees. Constructing a single 4-word sentence can take **2 to 3 minutes**, disconnecting the individual from natural conversational flow.
 4. **The Privacy Risk:** Cloud-based voice solutions routinely stream raw ambient audio and intimate life logs to remote servers.
 
@@ -95,13 +94,13 @@ flowchart TD
     subgraph Outputs ["4. Expressive Outputs"]
         direction LR
         DISPLAY["Visual AAC Grid\n(Scanning Highlight)"]
-        SPEECH["Spoken Voice\n(Local Audio & Room Cast)"]
+        SPEECH["Spoken Voice\n(Clear Device Audio)"]
     end
 
     %% Vertical Data Flow
     Inputs -->|Switch Events & Mic Audio| EdgeCore
     EdgeCore <-->|"Sanitized Context Only\n(Time + Activity)"| CloudAI
-    EdgeCore -->|Render UI & Stream Audio| Outputs
+    EdgeCore -->|Render UI & Play Audio| Outputs
 
     %% Presentation Styling
     style Inputs fill:#1e293b,stroke:#475569,stroke-width:2px,color:#fff
@@ -131,7 +130,7 @@ flowchart TD
 1. **Ambient Turn-Taking:** The caregiver asks a question. Holding `PREV + NEXT` toggles Listen Mode; on-device NLP parses the question and automatically populates the candidate choices.
 2. **Context-Aware Suggestions:** Even without speech input, the board automatically updates its prediction row based on the time of day and schedule (breakfast in the morning, bedtime stories at night).
 3. **Physical Selection:** The child navigates through the tiles or prediction row using physical buttons, with visual and audible feedback.
-4. **Room-Scale Audibility:** Spoken sentences play on device speakers so everyone can hear.
+4. **Clear Spoken Audio:** Spoken sentences play immediately through device speakers so everyone in the room can hear.
 
 ---
 
@@ -149,7 +148,30 @@ Assistive medical technology demands uncompromising data privacy. SaySo guarante
 - **Google Gemini Optimization:**
   - Uses `gemini-3.5-flash-lite` with `ThinkingLevel.MINIMAL` to guarantee responses within a hard **2-second deadline**.
   - Enforces structured JSON output via `response_json_schema` specifying exactly 6 child-friendly phrases under 100 characters.
-  - 
+
+---
+
+## 🏆 Target Tracks & Impact
+
+### 🌟 Best Use of Gemini API
+* Leverages Google Gemini 3.5 Flash-Lite's low latency and native structured JSON schema enforcement (`response_json_schema`) to generate conversational predictions under a hard 2-second real-time deadline.
+* Establishes a zero-PII architectural privacy boundary: sensitive health data remains local, while Gemini is queried with sanitized environmental context only.
+
+### 🏥 Best Healthcare Hack
+* Solves communicative isolation for individuals with cerebral palsy, ALS, stroke, apraxia, and autism.
+* Follows clinical speech-language pathology standards (Fitzgerald Key colors, Atkinson Hyperlegible typography) and includes a dedicated Caregiver / SLP dashboard for therapy progress tracking.
+
+### ⚙️ Best Hardware Hack
+* Embedded computing via Arduino Uno R3 / Uno Q with a 50ms debounce window, dual-button chords, and bare-metal 4-bit parallel register control of an HD44780 16x2 LCD display.
+* Real-time physical-digital bridge converting 9600 baud serial pulses into non-blocking JSON WebSockets.
+
+### 🤖 Best Physical AI Hack
+* A unified cyber-physical appliance: tactile button events directly trigger on-device acoustic models (Silero VAD + Moonshine Tiny on edge CPU threads), feed generative cloud predictions (Gemini), and output live physical audio.
+
+### 💡 Best Practical AI Innovation
+* **Agentic Turn-Taking:** Transitions AAC from a passive, slow catalog to an active conversational partner that listens and infers intent.
+* **Fail-Safe Resilience:** Features instant offline fallback to deterministic local vocabulary and browser speech synthesis—the user is never silenced if the network drops.
+
 ---
 
 ## 📂 Repository Structure & Quickstart
@@ -162,7 +184,7 @@ Assistive medical technology demands uncompromising data privacy. SaySo guarante
 │   ├── unoq_board/       # Single-board Arduino UNO Q firmware + 16x2 parallel LCD driver
 │   ├── bridge.py         # Serial-to-WebSocket input bridge
 │   └── unoq_bridge.py    # UNO Q Linux-side bridge & LCD telemetry reporter
-└── docs/                 # Architecture, API contracts, and testing guides
+└── docs/                 # Architecture, API contracts, deployment, and testing guides
 ```
 
 ### Quickstart
@@ -199,7 +221,9 @@ python hardware/bridge.py --port <SERIAL_PORT>
 - **Mulberry Symbols:** Symbol pictures in `frontend/public/symbols/` are from the [Mulberry Symbols](https://github.com/mulberrysymbols/mulberry-symbols) set, copyright 2018–2026 Steve Lee, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 - **Atkinson Hyperlegible Font:** Developed by the Braille Institute of America to maximize legibility and visual accessibility.
 
-## 👥 Contributers
+---
+
+## 👥 Contributors
 - Nirmal Shah
 - Carlos Mendez
 - Kalista Oberes
