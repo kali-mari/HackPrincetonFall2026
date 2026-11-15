@@ -142,6 +142,14 @@ if not 1 <= EMBED_THREADS <= 4:
 # a USB microphone; see arecord -l), or plays file:<path> in real time instead.
 LISTEN_DEVICE = os.environ.get('LISTEN_DEVICE', 'default').strip() or 'default'
 LISTEN_VAD_MODEL = env_path('LISTEN_VAD_MODEL', 'models/silero_vad.onnx')
+# Silence that ends a phrase. Each 0.1 s less shows text 0.1 s sooner, but a pause
+# mid-sentence may then split it in two.
+try:
+    LISTEN_SILENCE_SECONDS = float(os.environ.get('LISTEN_SILENCE_SECONDS', '0.5'))
+except ValueError:
+    LISTEN_SILENCE_SECONDS = 0
+if not 0.2 <= LISTEN_SILENCE_SECONDS <= 1.0:
+    raise ImproperlyConfigured('LISTEN_SILENCE_SECONDS must be a number of seconds from 0.2 to 1.0.')
 
 # Optional Google Home casting: blank disables it. The speaker fetches audio from
 # BACKEND_PUBLIC_BASE_URL, so that URL must be reachable on the LAN.

@@ -84,6 +84,15 @@ class InputConsumer(AsyncJsonWebsocketConsumer):
 
 
 RECENT_PHRASES = 50  # recent spoken phrases that may lift a matching suggestion
+START_FIELDS = {"type", "patient_id", "topic_threshold"}
+
+
+def read_threshold(value):
+    """The caregiver's topic-match cutoff from the board's input settings."""
+    low, high = conversation.THRESHOLD_RANGE
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
+        raise InvalidRequest(f"topic_threshold must be a number from {low} to {high}.")
+    return float(value)
 
 
 def suggestion_context(patient_id):
@@ -102,7 +111,7 @@ def suggestion_context(patient_id):
 
 
 class ConversationConsumer(AsyncJsonWebsocketConsumer):
-    """Client sends {"type": "start", "patient_id"?: uuid} or {"type": "stop"}. Server
+    """Client sends {"type": "start", "patient_id"?: uuid, "topic_threshold"?: number} or {"type": "stop"}. Server
     sends {"type": "state", "listening": bool}, {"type": "transcript", "seq": n, "text": ...},
     {"type": "suggestions", "seq": n, "topic": str|null, "phrases": [six, or none]} and
     {"type": "error", "message": ...}. There is one microphone, so one connection
@@ -116,6 +125,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         self.listener = None
         self.seq = 0
         self.lines, self.preferences, self.recent = [], {}, []
+        self.threshold = conversation.TOPIC_THRESHOLD
         if not allowed_origin(self.scope):
             await self.close()
             return
@@ -138,20 +148,21 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             return None
 
     async def receive_json(self, content, **kwargs):
-        if isinstance(content, dict) and content.get("type") == "start" and set(content) <= {"type", "patient_id"}:
+        if isinstance(content, dict) and content.get("type") == "start" and set(content) <= START_FIELDS:
             try:
                 patient_id = validate_uuid(content["patient_id"], "patient_id") if "patient_id" in content else None
+                threshold = read_threshold(content.get("topic_threshold", conversation.TOPIC_THRESHOLD))
             except InvalidRequest as error:
                 await self.send_error(str(error))
                 return
-            await self.start_listening(patient_id)
+            await self.start_listening(patient_id, threshold)
         elif content == {"type": "stop"}:
             self.stop_listening()
             await self.send_json({"type": "state", "listening": False})
         else:
-            await self.send_error('Send {"type": "start"} (optionally with "patient_id") or {"type": "stop"}.')
+            await self.send_error('Send {"type": "start"} (optionally with "patient_id" and "topic_threshold") or {"type": "stop"}.')
 
-    async def start_listening(self, patient_id=None):
+    async def start_listening(self, patient_id=None, threshold=conversation.TOPIC_THRESHOLD):
         owner = ConversationConsumer.owner
         if owner is not None and owner is not self:
             await self.send_error("Another connection is already listening.")
@@ -164,8 +175,8 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         except DatabaseError:
             await self.send_error("Profile storage is unavailable.")
             return
-        if owner is self:  # already listening, or still starting: a new patient starts fresh context
-            self.lines, (self.preferences, self.recent) = [], context
+        if owner is self:  # already listening, or still starting: new settings start fresh context
+            self.lines, (self.preferences, self.recent), self.threshold = [], context, threshold
             if self.listener:
                 await self.send_json({"type": "state", "listening": True})
             return
@@ -173,7 +184,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await self.send_error("Another connection is already listening.")
             return
         ConversationConsumer.owner = self
-        self.lines, (self.preferences, self.recent) = [], context
+        self.lines, (self.preferences, self.recent), self.threshold = [], context, threshold
         conversation.warm(self.preferences)  # background: the suggestion model is ready by the first question
         loop = asyncio.get_running_loop()
         listener = Listener(
@@ -211,7 +222,8 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         await self.send_json({"type": "transcript", "seq": seq, "text": text})
         self.lines = [*self.lines, text][-conversation.LINES:]
         try:
-            result = await asyncio.to_thread(conversation.suggest, list(self.lines), self.preferences, self.recent)
+            result = await asyncio.to_thread(
+                conversation.suggest, list(self.lines), self.preferences, self.recent, self.threshold)
         except Exception as error:  # a bug here must not end listening
             log.warning("Conversation suggestions failed (%s)", type(error).__name__)
             result = None

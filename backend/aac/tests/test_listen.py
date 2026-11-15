@@ -330,6 +330,24 @@ class ConversationSocketTest(IsolatedAsyncioTestCase):
         self.assertIsNone(ConversationConsumer.owner)
         self.assertEqual(FakeListener.instances, [])
 
+    async def test_topic_threshold_reaches_the_suggestions(self):
+        with patch.object(consumers.conversation, 'suggest', wraps=consumers.conversation.suggest) as suggest:
+            ws, _ = await self.connect()
+            listener = await self.start(ws, {'type': 'start', 'topic_threshold': 0.6})
+            await self.say(ws, listener, 'Are you thirsty?')
+            self.assertEqual(suggest.call_args.args[3], 0.6)
+            await self.start(ws, {'type': 'start', 'topic_threshold': 0.3})  # changed while listening
+            await self.say(ws, listener, 'Are you thirsty?')
+            self.assertEqual(suggest.call_args.args[3], 0.3)
+            self.assertEqual(len(FakeListener.instances), 1)  # same microphone session
+
+    async def test_out_of_range_threshold_is_refused(self):
+        ws, _ = await self.connect()
+        for value in (0.1, 0.9, True, '0.5', None):
+            await ws.send_json_to({'type': 'start', 'topic_threshold': value})
+            self.assertEqual((await ws.receive_json_from())['type'], 'error')
+        self.assertIsNone(ConversationConsumer.owner)
+
     async def test_stop_forgets_earlier_lines(self):
         ws, _ = await self.connect()
         listener = await self.start(ws)

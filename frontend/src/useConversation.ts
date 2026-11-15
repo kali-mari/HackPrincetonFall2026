@@ -15,14 +15,26 @@ export function parseSuggestions(message: unknown): ConversationSuggestions | nu
 }
 
 // Transcripts and suggestions stay in memory for display only, never hosted predictions or storage.
-export function useConversation(patientId: string, onContextChange?: () => void) {
+// topicThreshold is the caregiver's topic-match cutoff from Input settings (see the backend's start message).
+export function useConversation(patientId: string, topicThreshold: number, onContextChange?: () => void) {
   const [state, setState] = useState<State>(OFF)
   const wanted = useRef(false)
   const playback = useRef(false)
   const socket = useRef<WebSocket | null>(null)
   const latestChange = useRef(onContextChange)
   const newestSeq = useRef(0)
+  const threshold = useRef(topicThreshold)
   useEffect(() => { latestChange.current = onContextChange })
+
+  const startMessage = () => JSON.stringify({ type: 'start', patient_id: patientId, topic_threshold: threshold.current })
+
+  // A new threshold applies at once: sending start again on an open session updates its settings.
+  useEffect(() => {
+    threshold.current = topicThreshold
+    if (socket.current?.readyState === WebSocket.OPEN) {
+      socket.current.send(JSON.stringify({ type: 'start', patient_id: patientId, topic_threshold: topicThreshold }))
+    }
+  }, [patientId, topicThreshold])
 
   function closeSession(): Promise<void> {
     const current = socket.current
@@ -54,7 +66,7 @@ export function useConversation(patientId: string, onContextChange?: () => void)
     }
     newestSeq.current = 0 // seq restarts with each connection
     current.onopen = () => {
-      if (socket.current === current) current.send(JSON.stringify({ type: 'start', patient_id: patientId }))
+      if (socket.current === current) current.send(startMessage())
     }
     current.onmessage = (event) => {
       if (socket.current !== current) return

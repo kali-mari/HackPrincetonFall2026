@@ -155,6 +155,14 @@ class ModelSuggestionTests(SimpleTestCase):
         self.assertIn('Plus', result['phrases'])
         self.assertNotEqual(result['phrases'][0], 'I like math')
 
+    def test_threshold_controls_how_sure_a_topic_must_be(self):
+        with patch('aac.embeddings.embed', side_effect=fake_embed):
+            loose = conversation.suggest(['Which class is next?'], EMPTY, threshold=0.25)
+            strict = conversation.suggest(['Which class is next?'], EMPTY, threshold=0.75)
+        self.assertEqual(loose['topic'], 'classes')
+        self.assertIsNone(strict['topic'])  # not sure enough: general choices instead
+        self.assertEqual(strict['phrases'][0], 'Say it again')
+
     def test_model_failure_falls_back_to_keywords(self):
         with patch('aac.embeddings.embed', side_effect=embeddings.EmbeddingUnavailable('missing')):
             result = conversation.suggest(['Are you thirsty?'], EMPTY)

@@ -211,7 +211,7 @@ Client to server, JSON text frames:
 { "type": "stop" }
 ```
 
-`patient_id` is optional; it names the patient whose stored preferences and recent spoken phrases personalize suggestions. An unknown patient or malformed ID gets an `error` and listening does not start. Without it, suggestions are generic.
+`patient_id` is optional; it names the patient whose stored preferences and recent spoken phrases personalize suggestions. An unknown patient or malformed ID gets an `error` and listening does not start. Without it, suggestions are generic. `topic_threshold` is optional too: the topic-match cutoff for the on-device model from the board's input settings, 0.25 to 0.75 (default 0.45). Higher means fewer, surer topic cards and more general choices; it has no effect when the model is off. Sending `start` again while listening applies new settings and clears the follow-up lines.
 
 Server to client:
 

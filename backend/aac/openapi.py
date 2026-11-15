@@ -455,7 +455,10 @@ SCHEMAS = {
     ),
     "ConversationClientMessage": {
         "oneOf": [
-            obj({"type": enum("start"), "patient_id": UUID}, ("type",)),
+            obj({"type": enum("start"), "patient_id": UUID,
+                 "topic_threshold": {"type": "number", "minimum": 0.25, "maximum": 0.75, "default": 0.45,
+                                     "description": "Topic-match cutoff for the on-device model, from the board's input settings. Higher gives fewer, surer topic cards and more general choices. Ignored when the model is off."}},
+                ("type",)),
             obj({"type": enum("stop")}, ("type",)),
         ],
         "description": "WS /ws/conversation/ client message: start or stop caregiver listen mode. start may name the patient whose confirmed facts, vocabulary and recent speech personalize suggestions (unknown patient: error); without it suggestions are generic.",

@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 
 LINES = 3  # A follow-up such as "What about juice?" can use the topic of an earlier line.
 TOPIC_THRESHOLD = 0.45  # Max cosine over a topic's examples; chosen in the step 1 evaluation.
+THRESHOLD_RANGE = (0.25, 0.75)  # what a caregiver may choose in the board's input settings
 VOCABULARY_THRESHOLD = 0.45
 HISTORY_BOOST, HISTORY_CAP = 0.05, 0.15  # Per recent use of the same phrase, capped.
 QUESTION_WORDS = {'what', 'which', 'who', 'whose', 'where', 'when', 'why', 'how'}
@@ -153,12 +154,12 @@ def model_results(bank, lines, vocabulary):
     return None
 
 
-def model_topic(vectors, line_vector):
+def model_topic(vectors, line_vector, threshold=TOPIC_THRESHOLD):
     scores = {}
     for topic_id, vector in vectors['bank']['examples']:
         scores[topic_id] = max(scores.get(topic_id, -1.0), dot(line_vector, vector))
     best = max(scores, key=scores.get)
-    return best if scores[best] >= TOPIC_THRESHOLD else None
+    return best if scores[best] >= threshold else None
 
 
 def profile_items(preferences, profile_key):
@@ -172,10 +173,11 @@ def capitalize(text):
     return text[:1].upper() + text[1:]
 
 
-def suggest(lines, preferences, recent=()):
+def suggest(lines, preferences, recent=(), threshold=TOPIC_THRESHOLD):
     """{'topic', 'label', 'phrases' (exactly six), 'source'} for the newest lines, or None to keep regular predictions.
 
     `recent` is the patient's recent spoken phrases, newest first, used only as a small ranking boost.
+    `threshold` is the topic-match cutoff for the model (higher: fewer, surer topics); keywords ignore it.
     """
     bank = wordbank.load()
     lines = [line.strip() for line in lines if line.strip()][-LINES:]
@@ -187,7 +189,7 @@ def suggest(lines, preferences, recent=()):
 
     topic_id = None
     for index in reversed(range(len(lines))):
-        topic_id = model_topic(vectors, vectors['lines'][index]) if vectors else keyword_topic(bank, lines[index])
+        topic_id = model_topic(vectors, vectors['lines'][index], threshold) if vectors else keyword_topic(bank, lines[index])
         if topic_id:
             break
     question, options = is_question(newest), or_options(newest)
