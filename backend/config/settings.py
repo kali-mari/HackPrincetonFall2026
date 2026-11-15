@@ -161,8 +161,18 @@ if GOOGLE_HOME_HOST and public_url.hostname in {'localhost', '127.0.0.1', '::1'}
 
 # The unauthenticated demo is local/trusted-network only. No wildcard CORS or
 # credentials; keyboard input does not require a WebSocket connection.
-CORS_ALLOWED_ORIGINS = ['http://localhost:5173']
+CORS_ALLOWED_ORIGINS = [
+    origin.strip().rstrip('/')
+    for origin in os.environ.get('DJANGO_ALLOWED_ORIGINS', 'http://localhost:5173').split(',')
+    if origin.strip()
+]
 CORS_URLS_REGEX = r'^/api/'
+
+# Blank keeps the existing in-process inference for non-container development.
+# A filesystem socket deliberately prevents routing conversation data to a server.
+INFERENCE_SOCKET = os.environ.get('INFERENCE_SOCKET', '').strip()
+if INFERENCE_SOCKET and not Path(INFERENCE_SOCKET).is_absolute():
+    raise ImproperlyConfigured('INFERENCE_SOCKET must be an absolute filesystem path.')
 
 
 # Application definition
