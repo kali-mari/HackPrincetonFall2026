@@ -14,7 +14,6 @@ images, persistent storage, local inference, and microphone/button setup.
 - [System Architecture](#-system-architecture)
 - [How It Works (Demo & User Flow)](#-how-it-works-demo--user-flow)
 - [Privacy-First Hybrid AI Design](#-privacy-first-hybrid-ai-design)
-- [Target Tracks & Impact](#-target-tracks--impact)
 - [Repository Structure & Quickstart](#-repository-structure--quickstart)
 - [Credits & Licensing](#-credits--licensing)
 
