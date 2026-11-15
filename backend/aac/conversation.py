@@ -38,6 +38,7 @@ PARTICLES = {'away', 'out', 'up', 'off', 'down', 'over'}  # "taking away", "goin
 FILLER = {'okay', 'ok', 'well', 'um', 'uh', 'hey', 'hi', 'now', 'then', 'alright', 'and', 'like'}
 MAX_OPTIONS = 5  # with "Something else", the six cards
 MAX_OPTION_WORDS = 3
+FOLLOW_UP_STARTS = {'and', 'or', 'also', 'then', 'now', 'again', 'anything', 'more'}
 
 # One worker: a slow model call never piles up threads, and the next call skips the
 # model until it finishes.
@@ -53,6 +54,17 @@ def words(text):
 def is_question(text):
     found = words(text)
     return text.rstrip().endswith('?') or bool(found) and (found[0] in QUESTION_WORDS or found[0] in YES_NO_STARTS)
+
+
+def is_follow_up(text):
+    """A line that continues the previous topic ("What about now?", "And milk?", "Juice?")
+    rather than starting a new one ("What is the weather like?")."""
+    found = words(text)
+    if not found:
+        return False
+    if found[:2] in (['what', 'about'], ['how', 'about']) or found[0] in FOLLOW_UP_STARTS:
+        return True
+    return len(found) <= 3 and found[0] not in QUESTION_WORDS | YES_NO_STARTS
 
 
 def is_yes_no(text):
@@ -234,7 +246,7 @@ def suggest(lines, preferences, recent=(), threshold=TOPIC_THRESHOLD):
     topic_id = None
     for index in reversed(range(len(lines))):
         topic_id = model_topic(vectors, vectors['lines'][index], threshold) if vectors else keyword_topic(bank, lines[index])
-        if topic_id:
+        if topic_id or not is_follow_up(newest):  # a new unrelated question never inherits an old topic
             break
     question, options = is_question(newest), or_options(newest)
     opening = words(newest)[:1]

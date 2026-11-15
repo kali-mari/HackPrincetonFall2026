@@ -3,6 +3,7 @@
 import copy
 import json
 import re
+import unittest
 from pathlib import Path
 
 from django.test import SimpleTestCase
@@ -32,6 +33,7 @@ class ShippedBankTests(SimpleTestCase):
         for topic_id in bank['topics']:
             self.assertGreaterEqual(len(wordbank.topic_phrases(bank, topic_id)), wordbank.MIN_TOPIC_PHRASES, topic_id)
 
+    @unittest.skipUnless(SYMBOLS_TS.is_file(), 'needs the frontend checkout (absent on a backend-only deploy)')
     def test_symbols_exist_on_the_board(self):
         known = set(re.findall(r"word\('([a-z0-9-]+)'", SYMBOLS_TS.read_text(encoding='utf-8')))
         self.assertTrue(known, 'symbols.ts format changed; update this test.')

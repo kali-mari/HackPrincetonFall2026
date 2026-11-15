@@ -1,0 +1,33 @@
+{
+ "description": "Two invented patients for validation tests. Not real people; no real data.",
+ "patients": {
+  "avery": {
+   "display_name": "Avery (synthetic)",
+   "timezone": "America/New_York",
+   "preferences": {
+    "scan_interval_ms": 1500,
+    "input_modes": ["button", "keyboard"],
+    "default_activity": "play",
+    "favorites": {"drinks": ["apple juice"], "foods": ["pasta"], "activities": ["puzzles"]},
+    "about": {"classes": ["Math", "Art", "Music"], "interests": ["drawing", "swimming"], "people": ["Sam"]},
+    "vocabulary": ["dinosaur books"]
+   },
+   "spoken": [
+    {"text": "I want apple juice", "days_ago": 1, "activity": "lunch"},
+    {"text": "I feel happy", "days_ago": 1, "activity": "play"},
+    {"text": "Read to me", "days_ago": 2, "activity": "bedtime"}
+   ]
+  },
+  "blake": {
+   "display_name": "Blake (synthetic)",
+   "timezone": "America/Chicago",
+   "preferences": {
+    "scan_interval_ms": 2000,
+    "input_modes": ["button"],
+    "default_activity": "lunch"
+   },
+   "spoken": []
+  }
+ },
+ "private_markers": ["Avery", "apple juice", "pasta", "puzzles", "Math", "Art", "Music", "drawing", "swimming", "Sam", "dinosaur books", "I feel happy", "Read to me"]
+}

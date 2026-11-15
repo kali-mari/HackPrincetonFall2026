@@ -140,6 +140,12 @@ class KeywordSuggestionTests(SimpleTestCase):
 
     def test_follow_up_uses_an_earlier_topic(self):
         self.assertEqual(self.suggest('Are you thirsty?', 'What about now?')['topic'], 'drink')
+        self.assertEqual(self.suggest('Are you thirsty?', 'And now?')['topic'], 'drink')
+        self.assertEqual(self.suggest('Are you thirsty?', 'Juice?')['topic'], 'drink')
+
+    def test_a_new_unrelated_question_does_not_inherit_the_old_topic(self):
+        self.assertIsNone(self.suggest('What is your favorite math symbol?', 'What is the weather like outside?')['topic'])
+        self.assertIsNone(self.suggest('Are you thirsty?', 'Is it raining?')['topic'])
 
     def test_recent_speech_lifts_a_phrase(self):
         plain = self.suggest('How are you feeling?')['phrases']
