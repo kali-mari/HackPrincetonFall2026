@@ -75,6 +75,11 @@ The example above is synthetic; seed setup does not invent favorites for an
 existing profile. Spoken and selected choices remain `CommunicationEvent` rows;
 frequency does not automatically mark an item as a favorite.
 
+`preferences.about` (`classes`, `interests`, `people`) and `preferences.vocabulary`
+(up to 50 custom words or phrases) follow the same item rules and storage. They are
+caregiver-confirmed facts: generated suggestions and patient selections never write
+to them, so a suggested card is never treated as a known preference.
+
 Favorites can be edited in the caregiver dashboard or through the existing
 profile API. They personalize deterministic fallback, Gemini context, and local
 conversation choices. The existing whole-object preferences PATCH rule still

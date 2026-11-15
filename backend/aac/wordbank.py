@@ -10,14 +10,13 @@ import json
 import re
 from pathlib import Path
 
-from .profile_validation import FAVORITE_GROUPS
+from .profile_validation import ABOUT_GROUPS as ABOUT_KEYS, FAVORITE_GROUPS
 
 BANK_PATH = Path(__file__).with_name('wordbank.json')
 ID_PATTERN = re.compile(r'^[a-z0-9]+(?:[-_][a-z0-9]+)*$')
 # Starter intents from docs/label-vocabulary.md; roles are symbols.ts word types plus whole phrases.
 INTENTS = {'request', 'refusal', 'greeting', 'feeling', 'question', 'response', 'unknown'}
 ROLES = {'person', 'verb', 'describing', 'noun', 'social', 'negation', 'phrase'}
-ABOUT_KEYS = {'classes', 'interests', 'people'}
 PHRASE_COUNT = 6
 MIN_TOPIC_PHRASES = 4  # Leaves room for meta choices such as "Something else".
 MAX_TEXT = 60

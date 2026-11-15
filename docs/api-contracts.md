@@ -29,6 +29,12 @@ The **contract/documentation layer, HTTP route scaffolds, profile operations, ev
   Unknown groups, nulls, wrong types, and duplicate/oversized items return 400
   without changing the profile. Empty groups or `{}` clear favorites. This uses
   the existing SQLite profile JSON column and needs no migration or new route.
+- **Optional profile facts and vocabulary:** `preferences.about` accepts
+  `classes`, `interests`, and `people` with the same item rules as favorites.
+  `preferences.vocabulary` is a list of up to 50 caregiver-added words or
+  phrases with the same item rules. Only caregivers write these; suggestions
+  and the patient's selections never add to them. Conversation topics in
+  `backend/aac/wordbank.json` read them through each topic's `profile_key`.
 - A caregiver ID used as a patient ID (or the reverse) is 404, like an unknown ID.
 - Patient lists use ascending UUID order with a signed opaque cursor bound to the caregiver; a tampered, repeated or other-caregiver cursor is 400. The last page returns `next_cursor: null` (no empty terminal page).
 - **Additive 503:** all six profile operations may return `503 { "error": { "code": "unavailable", "message": "Profile storage is unavailable." } }` when SQLite is unavailable (for example, an unmigrated or unwritable database). Writes roll back; database details are never included.

@@ -123,6 +123,11 @@ SCHEMAS = {
          for group in ("foods", "drinks", "activities")},
         description="Explicit favorite items, stored locally with patient preferences. Items are trimmed, printable, and case-insensitively unique per group. Empty groups clear favorites; spoken frequency does not automatically create favorites.",
     ),
+    "AboutItems": obj(
+        {group: array(text(60), maxItems=10, uniqueItems=True)
+         for group in ("classes", "interests", "people")},
+        description="Caregiver-confirmed facts about the patient, stored locally with patient preferences and used to answer matching conversation topics. Same item rules as favorites. Suggestions and selections never add to them.",
+    ),
     "Error": obj(
         {"error": obj({"code": text(80), "message": text(300)}, ("code", "message"))},
         ("error",),
@@ -141,6 +146,11 @@ SCHEMAS = {
             "default_activity": text(100),
             "voice_id": text(100),
             "favorites": ref("FavoriteItems"),
+            "about": ref("AboutItems"),
+            "vocabulary": array(
+                text(60), maxItems=50, uniqueItems=True,
+                description="Caregiver-added words or phrases this patient uses, stored locally. Same item rules as favorites; never filled in automatically.",
+            ),
         },
         ("scan_interval_ms", "input_modes", "default_activity"),
     ),

@@ -1,7 +1,7 @@
 // Run with: TZ=America/New_York node --test src/api.test.ts
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { activityAt, createCaregiver, createPatient, events, listPatients, localIso, logSentence, predict, saveFavorites, speak } from './api.ts'
+import { activityAt, createCaregiver, createPatient, events, listPatients, localIso, logSentence, predict, saveProfileDetails, speak } from './api.ts'
 
 test('localIso keeps the local clock time and adds the offset', () => {
   assert.equal(localIso(new Date(2026, 10, 14, 12, 15)), '2026-11-14T12:15:00-05:00')
@@ -20,9 +20,10 @@ test('activityAt uses the seed activity names', () => {
   assert.equal(at(23, 59), 'bedtime')
 })
 
-test('saving favorites preserves fresh device and voice settings in the profile', async () => {
+test('saving profile details preserves fresh device and voice settings in the profile', async () => {
   const original = globalThis.fetch
-  const preferences = { scan_interval_ms: 2500, input_modes: ['keyboard'], default_activity: 'play', voice_id: 'demo-voice' }
+  const preferences = { scan_interval_ms: 2500, input_modes: ['keyboard'], default_activity: 'play', voice_id: 'demo-voice',
+    vocabulary: ['old word'] }
   let saved: unknown
   const paths: string[] = []
   globalThis.fetch = async (input, init) => {
@@ -34,8 +35,9 @@ test('saving favorites preserves fresh device and voice settings in the profile'
     return new Response(JSON.stringify({ preferences }))
   }
   try {
-    await saveFavorites('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', { drinks: ['mango juice'] })
-    assert.deepEqual(saved, { preferences: { ...preferences, favorites: { drinks: ['mango juice'] } } })
+    const details = { favorites: { drinks: ['mango juice'] }, about: { classes: ['Art'] }, vocabulary: ['dinosaur'] }
+    await saveProfileDetails('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', details)
+    assert.deepEqual(saved, { preferences: { ...preferences, ...details } })
     assert.deepEqual(paths, ['/api/profile/patients/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       '/api/profile/patients/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'])
   } finally {

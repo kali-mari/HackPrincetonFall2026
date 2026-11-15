@@ -171,6 +171,31 @@ class ProfileFeatureTests(TestCase):
         with self.assertRaises(ValidationError):
             row.save()
 
+    def test_about_and_vocabulary_persist_and_can_be_cleared(self):
+        details = {'about': {'classes': [' Math ', 'Art'], 'interests': ['drawing'], 'people': ['Sam']},
+                   'vocabulary': ['dinosaur', 'Grandpa Joe']}
+        patient = self.create_patient(preferences={**PREFERENCES, **details})
+        url = '/api/profile/patients/' + patient['id']
+        stored = self.assert_schema(self.client.get(url), 'Patient')['preferences']
+        self.assertEqual(stored['about'], {**details['about'], 'classes': ['Math', 'Art']})
+        self.assertEqual(stored['vocabulary'], details['vocabulary'])
+        result = self.assert_schema(self.client.patch(url,
+            {'preferences': {**PREFERENCES, 'about': {}, 'vocabulary': []}}, content_type='application/json'), 'Patient')
+        self.assertEqual((result['preferences']['about'], result['preferences']['vocabulary']), ({}, []))
+
+    def test_invalid_about_and_vocabulary_do_not_change_stored_preferences(self):
+        patient = self.create_patient()
+        url = '/api/profile/patients/' + patient['id']
+        invalid = [{'about': value} for value in (None, [], {'favorite_color': ['blue']}, {'classes': 'math'},
+                                                  {'people': ['Sam', 'sam']}, {'interests': [str(i) for i in range(11)]})]
+        invalid += [{'vocabulary': value} for value in ({}, 'dinosaur', [3], ['two\nlines'], ['x' * 61],
+                                                       [str(i) for i in range(51)])]
+        for change in invalid:
+            with self.subTest(change=change):
+                self.error(self.client.patch(url, {'preferences': {**PREFERENCES, **change}},
+                                             content_type='application/json'))
+        self.assertEqual(self.assert_schema(self.client.get(url), 'Patient')['preferences'], PREFERENCES)
+
     def test_role_scoped_read_update_delete_and_list(self):
         for identifier in (self.caregiver.pk, uuid4()):
             url = f'/api/profile/patients/{identifier}'
